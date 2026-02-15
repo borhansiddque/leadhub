@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getCountFromServer, query, where } from "firebase/firestore";
+import { collection, getCountFromServer, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
-import { FiDatabase, FiShoppingBag, FiDollarSign, FiTrendingUp, FiPlus, FiList } from "react-icons/fi";
+import { FiDatabase, FiShoppingBag, FiDollarSign, FiTrendingUp, FiPlus, FiList, FiUsers } from "react-icons/fi";
 
 export default function AdminDashboard() {
-    const [stats, setStats] = useState({ totalLeads: 0, availableLeads: 0, soldLeads: 0, totalOrders: 0 });
+    const [stats, setStats] = useState({ totalLeads: 0, availableLeads: 0, totalRevenue: 0, totalOrders: 0, totalCustomers: 0 });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -16,18 +16,22 @@ export default function AdminDashboard() {
                 const leadsRef = collection(db, "leads");
                 const ordersRef = collection(db, "orders");
 
-                const [totalSnap, availableSnap, soldSnap, ordersSnap] = await Promise.all([
+                const [totalSnap, availableSnap, ordersSnap] = await Promise.all([
                     getCountFromServer(leadsRef),
                     getCountFromServer(query(leadsRef, where("status", "==", "available"))),
-                    getCountFromServer(query(leadsRef, where("status", "==", "sold"))),
-                    getCountFromServer(ordersRef),
+                    getDocs(ordersRef),
                 ]);
+
+                const ordersData = ordersSnap.docs.map(doc => doc.data());
+                const totalRevenue = ordersData.reduce((sum, order) => sum + (order.price || 0), 0);
+                const uniqueCustomers = new Set(ordersData.map(order => order.userId)).size;
 
                 setStats({
                     totalLeads: totalSnap.data().count,
                     availableLeads: availableSnap.data().count,
-                    soldLeads: soldSnap.data().count,
-                    totalOrders: ordersSnap.data().count,
+                    totalRevenue,
+                    totalOrders: ordersSnap.docs.length,
+                    totalCustomers: uniqueCustomers,
                 });
             } catch (error) {
                 console.error("Error fetching stats:", error);
@@ -59,8 +63,9 @@ export default function AdminDashboard() {
                 {[
                     { label: "Total Leads", value: stats.totalLeads.toLocaleString(), icon: <FiDatabase size={22} />, color: "var(--accent-secondary)" },
                     { label: "Available", value: stats.availableLeads.toLocaleString(), icon: <FiTrendingUp size={22} />, color: "var(--success)" },
-                    { label: "Sold", value: stats.soldLeads.toLocaleString(), icon: <FiShoppingBag size={22} />, color: "var(--warning)" },
-                    { label: "Total Orders", value: stats.totalOrders.toLocaleString(), icon: <FiDollarSign size={22} />, color: "var(--accent-secondary)" },
+                    { label: "Total Revenue", value: `$${stats.totalRevenue.toLocaleString()}`, icon: <FiDollarSign size={22} />, color: "var(--warning)" },
+                    { label: "Total Sales", value: stats.totalOrders.toLocaleString(), icon: <FiShoppingBag size={22} />, color: "var(--accent-secondary)" },
+                    { label: "Unique Customers", value: stats.totalCustomers.toLocaleString(), icon: <FiUsers size={22} />, color: "var(--accent-primary)" },
                 ].map((stat, i) => (
                     <div key={i} className="stat-card">
                         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>

@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, addDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import {
     FiArrowLeft, FiMail, FiGlobe, FiBriefcase, FiMapPin, FiDollarSign,
-    FiShoppingCart, FiCheck, FiInstagram, FiLinkedin, FiCalendar, FiMonitor,
+    FiShoppingCart, FiCheck, FiInstagram, FiLinkedin, FiCalendar, FiMonitor, FiPlus
 } from "react-icons/fi";
+import { useCart } from "@/contexts/CartContext";
 
 interface Lead {
     id: string;
@@ -40,6 +41,7 @@ export default function LeadDetailPage() {
     const [purchasing, setPurchasing] = useState(false);
     const [purchased, setPurchased] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const { addToCart, isInCart } = useCart();
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -56,8 +58,27 @@ export default function LeadDetailPage() {
             }
             setLoading(false);
         }
-        if (params.id) fetchLead();
-    }, [params.id]);
+
+        async function checkPurchaseStatus() {
+            if (!user || !params.id) return;
+            try {
+                const q = query(
+                    collection(db, "orders"),
+                    where("userId", "==", user.uid),
+                    where("leadId", "==", params.id)
+                );
+                const snapshot = await getDocs(q);
+                if (!snapshot.empty) setPurchased(true);
+            } catch (error) {
+                console.error("Error checking purchase status:", error);
+            }
+        }
+
+        if (params.id) {
+            fetchLead();
+            if (user) checkPurchaseStatus();
+        }
+    }, [params.id, user]);
 
     async function handlePurchase() {
         if (!user || !lead) return;
@@ -86,7 +107,6 @@ export default function LeadDetailPage() {
                 purchasedAt: serverTimestamp(),
             });
 
-            await updateDoc(doc(db, "leads", lead.id), { status: "sold" });
             setPurchased(true);
         } catch (error) {
             console.error("Error purchasing lead:", error);
@@ -232,16 +252,24 @@ export default function LeadDetailPage() {
                                     Sign In to Purchase
                                 </Link>
                             ) : (
-                                <button
-                                    className="btn-primary"
-                                    onClick={handlePurchase}
-                                    disabled={purchasing}
-                                    style={{ width: "100%" }}
-                                >
-                                    {purchasing ? "Processing..." : (
-                                        <><FiShoppingCart size={16} /> Buy Now</>
+                                <>
+                                    {isInCart(lead.id) ? (
+                                        <Link href="/cart" className="btn-secondary" style={{ width: "100%", textDecoration: "none", textAlign: "center", background: "rgba(0, 214, 143, 0.1)", color: "var(--success)", borderColor: "rgba(0, 214, 143, 0.2)" }}>
+                                            <FiCheck size={16} /> In Cart - View Cart
+                                        </Link>
+                                    ) : (
+                                        <button
+                                            className="btn-primary"
+                                            onClick={() => addToCart(lead)}
+                                            style={{ width: "100%" }}
+                                        >
+                                            <FiShoppingCart size={16} /> Add to Cart
+                                        </button>
                                     )}
-                                </button>
+                                    <p style={{ marginTop: 12, fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center" }}>
+                                        Add multiple leads to purchase together
+                                    </p>
+                                </>
                             )}
                         </>
                     ) : (

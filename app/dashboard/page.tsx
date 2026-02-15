@@ -38,6 +38,8 @@ export default function DashboardPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [mounted, setMounted] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [indexUrl, setIndexUrl] = useState<string | null>(null);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -49,6 +51,7 @@ export default function DashboardPage() {
         }
 
         async function fetchOrders() {
+            setError(null);
             try {
                 const q = query(
                     collection(db, "orders"),
@@ -57,8 +60,16 @@ export default function DashboardPage() {
                 );
                 const snapshot = await getDocs(q);
                 setOrders(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Order)));
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Error fetching orders:", error);
+                const msg = error.message || "";
+                if (msg.toLowerCase().includes("index")) {
+                    setError("This view requires a database index.");
+                    const match = msg.match(/https:\/\/console\.firebase\.google\.com[^\s]*/);
+                    if (match) setIndexUrl(match[0]);
+                } else {
+                    setError("Failed to load your orders. Please try again.");
+                }
             }
             setLoading(false);
         }
@@ -116,7 +127,34 @@ export default function DashboardPage() {
             {/* Purchased Leads */}
             <h2 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 20 }}>Purchased Leads</h2>
 
-            {orders.length === 0 ? (
+            {error ? (
+                <div className="glass-card" style={{ padding: 40, textAlign: "center", border: "1px solid rgba(255, 107, 107, 0.2)", background: "rgba(255, 107, 107, 0.05)" }}>
+                    <p style={{ color: "#ff6b6b", marginBottom: 16, fontWeight: 500 }}>{error}</p>
+                    {indexUrl ? (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", maxWidth: 400 }}>
+                                Firestore requires a composite index to display your order history.
+                            </p>
+                            <a
+                                href={indexUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-primary btn-small"
+                                style={{ textDecoration: "none" }}
+                            >
+                                Create Required Index
+                            </a>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                After clicking, wait ~1 minute for the index to build, then refresh the page.
+                            </p>
+                        </div>
+                    ) : (
+                        <button className="btn-secondary btn-small" onClick={() => window.location.reload()}>
+                            Try Again
+                        </button>
+                    )}
+                </div>
+            ) : orders.length === 0 ? (
                 <div className="glass-card" style={{ padding: 60, textAlign: "center" }}>
                     <FiShoppingBag size={48} style={{ color: "var(--text-muted)", marginBottom: 16 }} />
                     <h3 style={{ fontSize: "1.1rem", marginBottom: 8, color: "var(--text-secondary)" }}>No purchases yet</h3>

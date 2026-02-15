@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
 import { HiMenu, HiX } from "react-icons/hi";
-import { FiLogOut, FiUser, FiShoppingBag, FiSettings, FiZap } from "react-icons/fi";
+import { FiLogOut, FiUser, FiShoppingBag, FiSettings, FiZap, FiShoppingCart } from "react-icons/fi";
+import { useCart } from "@/contexts/CartContext";
 
 export default function Navbar() {
     const { user, userData, logout, loading } = useAuth();
+    const { cart } = useCart();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -109,6 +111,32 @@ export default function Navbar() {
                             </button>
                         </>
                     )}
+
+                    <Link href="/cart" style={{ ...navLinkStyle, position: "relative" }}>
+                        <FiShoppingCart size={18} />
+                        {mounted && cart.length > 0 && (
+                            <span
+                                style={{
+                                    position: "absolute",
+                                    top: 4,
+                                    right: 4,
+                                    background: "var(--accent-primary)",
+                                    color: "white",
+                                    fontSize: "0.65rem",
+                                    fontWeight: 700,
+                                    width: 16,
+                                    height: 16,
+                                    borderRadius: "100%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    border: "2px solid var(--bg-card)",
+                                }}
+                            >
+                                {cart.length}
+                            </span>
+                        )}
+                    </Link>
                 </div>
 
                 {/* Mobile Toggle */}
@@ -142,6 +170,9 @@ export default function Navbar() {
                 >
                     <Link href="/leads" style={mobileLinkStyle} onClick={() => setMobileOpen(false)}>
                         <FiShoppingBag size={16} /> Marketplace
+                    </Link>
+                    <Link href="/cart" style={mobileLinkStyle} onClick={() => setMobileOpen(false)}>
+                        <FiShoppingCart size={16} /> Cart {mounted && cart.length > 0 && `(${cart.length})`}
                     </Link>
                     {showAuth && !user && (
                         <>

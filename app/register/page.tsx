@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -8,13 +8,19 @@ import { FiMail, FiLock, FiUser, FiZap } from "react-icons/fi";
 import { FcGoogle } from "react-icons/fc";
 
 export default function RegisterPage() {
-    const { register, loginWithGoogle } = useAuth();
+    const { user, register, loginWithGoogle } = useAuth();
     const router = useRouter();
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (user) {
+            router.push("/dashboard");
+        }
+    }, [user, router]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();

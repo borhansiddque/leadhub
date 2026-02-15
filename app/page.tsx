@@ -1,9 +1,54 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FiZap, FiSearch, FiShield, FiTrendingUp, FiUsers, FiDatabase, FiArrowRight, FiStar } from "react-icons/fi";
+import { FiZap, FiSearch, FiShield, FiTrendingUp, FiUsers, FiDatabase, FiArrowRight, FiStar, FiMapPin, FiBriefcase, FiCheck } from "react-icons/fi";
+import { collection, query, orderBy, limit, getDocs, getCountFromServer } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+interface Lead {
+  id: string;
+  websiteName: string;
+  websiteUrl: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  industry: string;
+  location: string;
+  price: number;
+}
 
 export default function Home() {
+  const [totalLeads, setTotalLeads] = useState<number | null>(null);
+  const [totalOrders, setTotalOrders] = useState<number | null>(null);
+  const [featuredLeads, setFeaturedLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    async function fetchHomeData() {
+      try {
+        const countSnapshot = await getCountFromServer(collection(db, "leads"));
+        setTotalLeads(countSnapshot.data().count);
+
+        // 2. Fetch Total Orders
+        const ordersSnapshot = await getCountFromServer(collection(db, "orders"));
+        setTotalOrders(ordersSnapshot.data().count);
+
+        // 3. Fetch Featured Leads (Latest 3)
+        const q = query(collection(db, "leads"), orderBy("createdAt", "desc"), limit(3));
+        const leadSnapshot = await getDocs(q);
+        setFeaturedLeads(leadSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead)));
+      } catch (error) {
+        console.error("Error fetching home data:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchHomeData();
+  }, []);
+
   return (
     <div className="grid-bg" style={{ minHeight: "100vh", overflow: "hidden", position: "relative" }}>
       {/* Glow orbs */}
@@ -53,7 +98,7 @@ export default function Home() {
           }}
         >
           Access{" "}
-          <span className="gradient-text">1M+ Premium</span>
+          <span className="gradient-text">Premium Verified</span>
           <br />
           Business Leads Instantly
         </h1>
@@ -98,10 +143,10 @@ export default function Home() {
         }}
       >
         {[
-          { value: "1M+", label: "Total Leads", icon: <FiDatabase size={22} /> },
-          { value: "50+", label: "Industries", icon: <FiTrendingUp size={22} /> },
-          { value: "98%", label: "Accuracy Rate", icon: <FiShield size={22} /> },
-          { value: "10K+", label: "Happy Customers", icon: <FiUsers size={22} /> },
+          { value: (mounted && totalLeads !== null) ? `${totalLeads}+` : "1M+", label: "Verified Leads", icon: <FiDatabase size={22} /> },
+          { value: "12", label: "Core Industries", icon: <FiTrendingUp size={22} /> },
+          { value: "99%", label: "Accuracy Rate", icon: <FiShield size={22} /> },
+          { value: (mounted && totalOrders !== null) ? `${totalOrders}+` : "10K+", label: "Happy Customers", icon: <FiUsers size={22} /> },
         ].map((stat, i) => (
           <div
             key={i}
@@ -133,6 +178,73 @@ export default function Home() {
           </div>
         ))}
       </section>
+
+      {/* Featured Leads Section */}
+      {mounted && featuredLeads.length > 0 && (
+        <section
+          style={{
+            maxWidth: 1280,
+            margin: "0 auto 120px",
+            padding: "0 24px",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 48 }}>
+            <div>
+              <h2 style={{ fontSize: "2.5rem", fontWeight: 800, marginBottom: 12, letterSpacing: "-1px" }}>
+                Featured <span className="gradient-text">Leads</span>
+              </h2>
+              <p style={{ color: "var(--text-secondary)", fontSize: "1.1rem" }}>Hand-picked premium business contacts</p>
+            </div>
+            <Link href="/leads" className="btn-secondary btn-small" style={{ textDecoration: "none" }}>
+              View Marketplace <FiArrowRight size={16} />
+            </Link>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+              gap: 24,
+            }}
+          >
+            {featuredLeads.map((lead, i) => (
+              <div
+                key={lead.id}
+                className="glass-card"
+                style={{ padding: 28, position: "relative" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: "var(--radius-md)", background: "var(--accent-gradient)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, fontSize: "1.1rem" }}>
+                    {lead.firstName?.charAt(0) || "?"}
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>{lead.firstName} {lead.lastName}</h3>
+                    <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>{lead.jobTitle}</p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                    <FiBriefcase size={14} style={{ color: "var(--accent-secondary)" }} />
+                    {lead.industry}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                    <FiMapPin size={14} style={{ color: "var(--accent-secondary)" }} />
+                    {lead.location}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 20, borderTop: "1px solid var(--border-color)" }}>
+                  <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--accent-secondary)" }}>${lead.price.toFixed(2)}</div>
+                  <Link href={`/leads/${lead.id}`} className="btn-primary btn-small" style={{ textDecoration: "none" }}>
+                    View Details
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Features */}
       <section

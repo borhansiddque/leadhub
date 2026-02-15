@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { collection, query, where, orderBy, limit, startAfter, getDocs, DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
-import { FiSearch, FiMapPin, FiBriefcase, FiDollarSign, FiChevronLeft, FiChevronRight, FiFilter, FiGlobe } from "react-icons/fi";
+import { FiSearch, FiMapPin, FiBriefcase, FiDollarSign, FiChevronLeft, FiChevronRight, FiFilter, FiGlobe, FiShoppingCart, FiPlus, FiCheck, FiLoader } from "react-icons/fi";
+import { useCart } from "@/contexts/CartContext";
+import { useDebounce } from "@/hooks/useDebounce";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Lead {
     id: string;
@@ -14,8 +17,13 @@ interface Lead {
     lastName: string;
     jobTitle: string;
     email: string;
+    instagram: string;
+    linkedin: string;
     industry: string;
     location: string;
+    tiktok: string;
+    founded: string;
+    facebookPixel: string;
     price: number;
     status: string;
 }
@@ -32,18 +40,28 @@ export default function LeadsPage() {
     const [hasMore, setHasMore] = useState(true);
     const [page, setPage] = useState(1);
     const [showFilters, setShowFilters] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [indexUrl, setIndexUrl] = useState<string | null>(null);
+    const [purchasedLeadIds, setPurchasedLeadIds] = useState<Set<string>>(new Set());
+    const { addToCart, isInCart } = useCart();
+    const { user } = useAuth();
+
+    // Debounce search term for smoother UI
+    const debouncedSearchTerm = useDebounce(searchTerm, 300);
+    const isSearching = searchTerm !== debouncedSearchTerm;
 
     async function fetchLeads(reset = false) {
         setLoading(true);
+        setError(null);
         try {
-            const constraints = [
+            const constraints: any[] = [
                 where("status", "==", "available"),
                 orderBy("createdAt", "desc"),
                 limit(PER_PAGE),
             ];
 
             if (industry !== "All") {
-                constraints.unshift(where("industry", "==", industry));
+                constraints.push(where("industry", "==", industry));
             }
 
             const q = !reset && lastDoc
@@ -53,11 +71,24 @@ export default function LeadsPage() {
             const snapshot = await getDocs(q);
             const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Lead));
 
-            setLeads(data);
+            if (reset) {
+                setLeads(data);
+            } else {
+                setLeads(prev => [...prev, ...data]);
+            }
             setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
             setHasMore(snapshot.docs.length === PER_PAGE);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error fetching leads:", error);
+            const msg = error.message || "";
+            if (msg.toLowerCase().includes("index")) {
+                setError("This filter requires a database index.");
+                // Extract link if present in error message
+                const match = msg.match(/https:\/\/console\.firebase\.google\.com[^\s]*/);
+                if (match) setIndexUrl(match[0]);
+            } else {
+                setError("Failed to load leads. Please try again.");
+            }
         }
         setLoading(false);
     }
@@ -68,21 +99,45 @@ export default function LeadsPage() {
         fetchLeads(true);
     }, [industry]);
 
+    useEffect(() => {
+        async function fetchPurchasedLeads() {
+            if (!user) {
+                setPurchasedLeadIds(new Set());
+                return;
+            }
+            try {
+                const q = query(collection(db, "orders"), where("userId", "==", user.uid));
+                const snapshot = await getDocs(q);
+                const ids = new Set(snapshot.docs.map(doc => doc.data().leadId));
+                setPurchasedLeadIds(ids);
+            } catch (error) {
+                console.error("Error fetching purchased leads:", error);
+            }
+        }
+        fetchPurchasedLeads();
+    }, [user]);
+
     function handleNextPage() {
         setPage((p) => p + 1);
         fetchLeads(false);
     }
 
-    const filteredLeads = leads.filter((lead) => {
-        if (!searchTerm) return true;
-        const s = searchTerm.toLowerCase();
+    const filteredLeads = leads.filter((l) => {
+        if (!debouncedSearchTerm) return true;
+        const s = debouncedSearchTerm.toLowerCase();
         return (
-            lead.firstName?.toLowerCase().includes(s) ||
-            lead.lastName?.toLowerCase().includes(s) ||
-            lead.websiteName?.toLowerCase().includes(s) ||
-            lead.industry?.toLowerCase().includes(s) ||
-            lead.location?.toLowerCase().includes(s) ||
-            lead.jobTitle?.toLowerCase().includes(s)
+            (l.firstName || "").toLowerCase().includes(s) ||
+            (l.lastName || "").toLowerCase().includes(s) ||
+            (l.websiteName || "").toLowerCase().includes(s) ||
+            (l.industry || "").toLowerCase().includes(s) ||
+            (l.location || "").toLowerCase().includes(s) ||
+            (l.jobTitle || "").toLowerCase().includes(s) ||
+            (l.email || "").toLowerCase().includes(s) ||
+            (l.instagram || "").toLowerCase().includes(s) ||
+            (l.linkedin || "").toLowerCase().includes(s) ||
+            (l.tiktok || "").toLowerCase().includes(s) ||
+            (l.founded || "").toLowerCase().includes(s) ||
+            (l.facebookPixel || "").toLowerCase().includes(s)
         );
     });
 
@@ -115,6 +170,11 @@ export default function LeadsPage() {
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
+                    {isSearching && (
+                        <div style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", color: "var(--accent-secondary)" }}>
+                            <FiLoader className="spinner" size={16} />
+                        </div>
+                    )}
                 </div>
                 <button
                     className="btn-secondary btn-small"
@@ -155,9 +215,32 @@ export default function LeadsPage() {
             )}
 
             {/* Loading */}
-            {loading && (
-                <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
-                    <div className="spinner" />
+            {error && (
+                <div className="glass-card" style={{ padding: 40, textAlign: "center", border: "1px solid rgba(255, 107, 107, 0.2)", background: "rgba(255, 107, 107, 0.05)" }}>
+                    <p style={{ color: "#ff6b6b", marginBottom: 16, fontWeight: 500 }}>{error}</p>
+                    {indexUrl ? (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", maxWidth: 400 }}>
+                                Firestore requires a composite index for this specific filter combination.
+                            </p>
+                            <a
+                                href={indexUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-primary btn-small"
+                                style={{ textDecoration: "none" }}
+                            >
+                                Create Required Index
+                            </a>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                After clicking, wait ~1 minute for the index to build, then click "Try Again".
+                            </p>
+                        </div>
+                    ) : (
+                        <button className="btn-secondary btn-small" onClick={() => fetchLeads(true)}>
+                            Try Again
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -165,10 +248,13 @@ export default function LeadsPage() {
             {!loading && filteredLeads.length === 0 && (
                 <div className="glass-card" style={{ padding: 60, textAlign: "center" }}>
                     <FiSearch size={48} style={{ color: "var(--text-muted)", marginBottom: 16 }} />
-                    <h3 style={{ fontSize: "1.2rem", marginBottom: 8, color: "var(--text-secondary)" }}>No leads found</h3>
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                        Try adjusting your search or filters, or check back later for new leads.
+                    <h3 style={{ fontSize: "1.2rem", marginBottom: 8, color: "var(--text-secondary)" }}>No leads available</h3>
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", maxWidth: 400, margin: "0 auto 24px" }}>
+                        We couldn't find any leads matching your criteria. If you just created a database index, it may take a moment to sync.
                     </p>
+                    <button className="btn-secondary btn-small" onClick={() => fetchLeads(true)}>
+                        Refresh Marketplace
+                    </button>
                 </div>
             )}
 
@@ -210,39 +296,67 @@ export default function LeadsPage() {
                                 >
                                     {lead.firstName?.charAt(0)?.toUpperCase() || "?"}
                                 </div>
-                                <span className="badge badge-available">Available</span>
+                                {purchasedLeadIds.has(lead.id) ? (
+                                    <span className="badge" style={{ background: "rgba(0, 214, 143, 0.1)", color: "var(--success)" }}>Purchased</span>
+                                ) : (
+                                    <span className="badge badge-available">Available</span>
+                                )}
                             </div>
 
                             <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 6 }}>
                                 {lead.firstName} {lead.lastName}
                             </h3>
                             {lead.jobTitle && (
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: 4 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--accent-secondary)", fontSize: "0.85rem", marginBottom: 6, fontWeight: 500 }}>
                                     <FiBriefcase size={13} /> {lead.jobTitle}
                                 </div>
                             )}
-                            {lead.websiteName && (
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: 4 }}>
-                                    <FiGlobe size={13} /> {lead.websiteName}
-                                </div>
-                            )}
-                            {lead.location && (
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: 4 }}>
-                                    <FiMapPin size={13} /> {lead.location}
-                                </div>
-                            )}
-                            {lead.industry && (
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: 12 }}>
-                                    <FiBriefcase size={13} /> {lead.industry}
-                                </div>
-                            )}
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+                                {lead.industry && (
+                                    <span style={{ fontSize: "0.75rem", padding: "3px 10px", background: "rgba(108, 92, 231, 0.1)", borderRadius: "var(--radius-full)", color: "var(--accent-secondary)", border: "1px solid rgba(108, 92, 231, 0.2)" }}>
+                                        {lead.industry}
+                                    </span>
+                                )}
+                                {lead.location && (
+                                    <span style={{ fontSize: "0.75rem", padding: "3px 10px", background: "rgba(255, 255, 255, 0.05)", borderRadius: "var(--radius-full)", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 4 }}>
+                                        <FiMapPin size={11} /> {lead.location}
+                                    </span>
+                                )}
+                            </div>
 
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-color)" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--accent-secondary)", fontWeight: 700, fontSize: "1.1rem" }}>
+                            <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginBottom: 12 }}>
+                                {lead.websiteName && <div style={{ marginBottom: 4 }}>Company: {lead.websiteName}</div>}
+                                {lead.facebookPixel && <div>FB Pixel: {lead.facebookPixel}</div>}
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-color)" }}>
+                                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, color: "var(--accent-secondary)", fontWeight: 700, fontSize: "1.1rem" }}>
                                     <FiDollarSign size={16} />
                                     {lead.price?.toFixed(2) || "0.00"}
                                 </div>
-                                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>View Details →</span>
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (purchasedLeadIds.has(lead.id)) return;
+                                        if (!isInCart(lead.id)) addToCart(lead);
+                                    }}
+                                    disabled={purchasedLeadIds.has(lead.id)}
+                                    className={isInCart(lead.id) || purchasedLeadIds.has(lead.id) ? "btn-secondary btn-small" : "btn-primary btn-small"}
+                                    style={{
+                                        padding: "6px 14px",
+                                        fontSize: "0.8rem",
+                                        background: purchasedLeadIds.has(lead.id) ? "rgba(255, 255, 255, 0.05)" : (isInCart(lead.id) ? "rgba(0, 214, 143, 0.1)" : undefined),
+                                        color: purchasedLeadIds.has(lead.id) ? "var(--text-muted)" : (isInCart(lead.id) ? "var(--success)" : undefined),
+                                        borderColor: purchasedLeadIds.has(lead.id) ? "transparent" : (isInCart(lead.id) ? "rgba(0, 214, 143, 0.2)" : undefined),
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                        cursor: purchasedLeadIds.has(lead.id) ? "not-allowed" : "pointer",
+                                    }}
+                                >
+                                    {purchasedLeadIds.has(lead.id) ? <><FiCheck size={14} /> Owned</> : (isInCart(lead.id) ? <><FiCheck size={14} /> In Cart</> : <><FiPlus size={14} /> Add</>)}
+                                </button>
                             </div>
                         </Link>
                     ))}
