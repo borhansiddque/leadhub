@@ -22,6 +22,8 @@ export default function Home() {
   const [totalLeads, setTotalLeads] = useState<number | null>(null);
   const [totalOrders, setTotalOrders] = useState<number | null>(null);
   const [featuredLeads, setFeaturedLeads] = useState<Lead[]>([]);
+  const [industries, setIndustries] = useState<string[]>([]);
+  const [totalIndsCount, setTotalIndsCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -40,6 +42,22 @@ export default function Home() {
         const q = query(collection(db, "leads"), orderBy("createdAt", "desc"), limit(3));
         const leadSnapshot = await getDocs(q);
         setFeaturedLeads(leadSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead)));
+
+        // 4. Fetch Industries for Matrix
+        const metaQ = query(collection(db, "leads"), limit(300));
+        const metaSnap = await getDocs(metaQ);
+        const inds = new Set<string>();
+        metaSnap.docs.forEach(doc => {
+          const ind = doc.data().industry;
+          if (ind) inds.add(ind);
+        });
+
+        const allInds = Array.from(inds);
+        setTotalIndsCount(allInds.length);
+
+        // Shuffle and pick 15
+        const shuffled = allInds.sort(() => 0.5 - Math.random());
+        setIndustries(shuffled.slice(0, 15).sort());
       } catch (error) {
         console.error("Error fetching home data:", error);
       } finally {
@@ -144,7 +162,7 @@ export default function Home() {
       >
         {[
           { value: (mounted && totalLeads !== null) ? `${totalLeads}+` : "1M+", label: "Verified Leads", icon: <FiDatabase size={22} /> },
-          { value: "12", label: "Core Industries", icon: <FiTrendingUp size={22} /> },
+          { value: (mounted && totalIndsCount > 0) ? `${totalIndsCount}` : "12", label: "Core Industries", icon: <FiTrendingUp size={22} /> },
           { value: "99%", label: "Accuracy Rate", icon: <FiShield size={22} /> },
           { value: (mounted && totalOrders !== null) ? `${totalOrders}+` : "10K+", label: "Happy Customers", icon: <FiUsers size={22} /> },
         ].map((stat, i) => (
@@ -203,7 +221,7 @@ export default function Home() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
               gap: 24,
             }}
           >
@@ -241,6 +259,64 @@ export default function Home() {
                   </Link>
                 </div>
               </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Core Industries Matrix */}
+      {mounted && industries.length > 0 && (
+        <section
+          style={{
+            maxWidth: 1280,
+            margin: "0 auto 120px",
+            padding: "0 24px",
+          }}
+        >
+          <div style={{ textAlign: "center", marginBottom: 48 }}>
+            <h2 style={{ fontSize: "2.5rem", fontWeight: 800, marginBottom: 12, letterSpacing: "-1px" }}>
+              Core <span className="gradient-text">Industries</span>
+            </h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: "1.1rem" }}>Browse leads across diverse business sectors</p>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: 16,
+            }}
+          >
+            {industries.map((ind, i) => (
+              <Link
+                key={ind}
+                href={`/leads?industry=${encodeURIComponent(ind)}`}
+                className="glass-card hover-lift"
+                style={{
+                  padding: "24px",
+                  textAlign: "center",
+                  textDecoration: "none",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 12,
+                  transition: "all 0.3s ease"
+                }}
+              >
+                <div style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  background: "rgba(108, 92, 231, 0.1)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--accent-secondary)"
+                }}>
+                  <FiBriefcase size={20} />
+                </div>
+                <span style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "0.95rem" }}>{ind}</span>
+              </Link>
             ))}
           </div>
         </section>

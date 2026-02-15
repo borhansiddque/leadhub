@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
 import { HiMenu, HiX } from "react-icons/hi";
-import { FiLogOut, FiUser, FiShoppingBag, FiSettings, FiZap, FiShoppingCart } from "react-icons/fi";
+import { FiLogOut, FiUser, FiShoppingBag, FiSettings, FiZap, FiShoppingCart, FiBook } from "react-icons/fi";
 import { useCart } from "@/contexts/CartContext";
 
 export default function Navbar() {
@@ -72,6 +72,10 @@ export default function Navbar() {
                         <FiShoppingBag size={16} />
                         Marketplace
                     </Link>
+                    <Link href="/docs" style={navLinkStyle}>
+                        <FiBook size={16} />
+                        Docs
+                    </Link>
 
                     {showAuth && !user && (
                         <>
@@ -86,16 +90,16 @@ export default function Navbar() {
 
                     {showAuth && user && (
                         <>
+                            <Link href="/dashboard" style={navLinkStyle}>
+                                <FiUser size={16} />
+                                Dashboard
+                            </Link>
                             {userData?.role === "admin" && (
                                 <Link href="/admin" style={navLinkStyle}>
                                     <FiSettings size={16} />
                                     Admin
                                 </Link>
                             )}
-                            <Link href="/dashboard" style={navLinkStyle}>
-                                <FiUser size={16} />
-                                Dashboard
-                            </Link>
                             <button
                                 onClick={logout}
                                 style={{
@@ -171,8 +175,8 @@ export default function Navbar() {
                     <Link href="/leads" style={mobileLinkStyle} onClick={() => setMobileOpen(false)}>
                         <FiShoppingBag size={16} /> Marketplace
                     </Link>
-                    <Link href="/cart" style={mobileLinkStyle} onClick={() => setMobileOpen(false)}>
-                        <FiShoppingCart size={16} /> Cart {mounted && cart.length > 0 && `(${cart.length})`}
+                    <Link href="/docs" style={mobileLinkStyle} onClick={() => setMobileOpen(false)}>
+                        <FiBook size={16} /> Docs
                     </Link>
                     {showAuth && !user && (
                         <>
@@ -186,14 +190,14 @@ export default function Navbar() {
                     )}
                     {showAuth && user && (
                         <>
+                            <Link href="/dashboard" style={mobileLinkStyle} onClick={() => setMobileOpen(false)}>
+                                <FiUser size={16} /> Dashboard
+                            </Link>
                             {userData?.role === "admin" && (
                                 <Link href="/admin" style={mobileLinkStyle} onClick={() => setMobileOpen(false)}>
                                     <FiSettings size={16} /> Admin
                                 </Link>
                             )}
-                            <Link href="/dashboard" style={mobileLinkStyle} onClick={() => setMobileOpen(false)}>
-                                <FiUser size={16} /> Dashboard
-                            </Link>
                             <button
                                 onClick={() => {
                                     logout();
@@ -213,6 +217,9 @@ export default function Navbar() {
                             </button>
                         </>
                     )}
+                    <Link href="/cart" style={mobileLinkStyle} onClick={() => setMobileOpen(false)}>
+                        <FiShoppingCart size={16} /> Cart {mounted && cart.length > 0 && `(${cart.length})`}
+                    </Link>
                 </div>
             )}
 
