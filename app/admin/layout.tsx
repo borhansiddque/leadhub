@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, ReactNode, useState } from "react";
 import Link from "next/link";
-import { FiHome, FiDatabase, FiShoppingBag, FiArrowLeft } from "react-icons/fi";
+import { FiHome, FiDatabase, FiShoppingBag, FiArrowLeft, FiUsers } from "react-icons/fi";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
     const { user, userData, loading } = useAuth();
@@ -32,6 +32,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         { href: "/admin", icon: <FiHome size={18} />, label: "Dashboard" },
         { href: "/admin/leads", icon: <FiDatabase size={18} />, label: "Manage Leads" },
         { href: "/admin/orders", icon: <FiShoppingBag size={18} />, label: "Orders" },
+        { href: "/admin/users", icon: <FiUsers size={18} />, label: "Users" },
     ];
 
     return (

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { collection, query, where, orderBy, limit, startAfter, getDocs, DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
-import { FiSearch, FiMapPin, FiBriefcase, FiDollarSign, FiChevronLeft, FiChevronRight, FiFilter, FiGlobe, FiShoppingCart, FiPlus, FiCheck, FiLoader } from "react-icons/fi";
+import { FiSearch, FiMapPin, FiBriefcase, FiDollarSign, FiChevronLeft, FiChevronRight, FiFilter, FiGlobe, FiShoppingCart, FiPlus, FiCheck, FiLoader, FiHeart } from "react-icons/fi";
 import { useCart } from "@/contexts/CartContext";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43,6 +43,7 @@ export default function LeadsPage() {
     const [error, setError] = useState<string | null>(null);
     const [indexUrl, setIndexUrl] = useState<string | null>(null);
     const [purchasedLeadIds, setPurchasedLeadIds] = useState<Set<string>>(new Set());
+    const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
     const { addToCart, isInCart } = useCart();
     const { user } = useAuth();
 
@@ -116,6 +117,65 @@ export default function LeadsPage() {
         }
         fetchPurchasedLeads();
     }, [user]);
+
+    useEffect(() => {
+        async function fetchWishlist() {
+            if (!user) {
+                setWishlistIds(new Set());
+                return;
+            }
+            try {
+                const q = query(collection(db, "wishlist"), where("userId", "==", user.uid));
+                const snapshot = await getDocs(q);
+                const ids = new Set(snapshot.docs.map(doc => doc.data().leadId));
+                setWishlistIds(ids);
+            } catch (error) {
+                console.error("Error fetching wishlist:", error);
+            }
+        }
+        fetchWishlist();
+    }, [user]);
+
+    const toggleWishlist = async (leadId: string) => {
+        if (!user) {
+            router.push("/login");
+            return;
+        }
+
+        const isFavorited = wishlistIds.has(leadId);
+        const newIds = new Set(wishlistIds);
+
+        try {
+            if (isFavorited) {
+                newIds.delete(leadId);
+                setWishlistIds(newIds);
+                // Find and delete the doc
+                const q = query(
+                    collection(db, "wishlist"),
+                    where("userId", "==", user.uid),
+                    where("leadId", "==", leadId)
+                );
+                const snapshot = await getDocs(q);
+                const { deleteDoc, doc } = await import("firebase/firestore");
+                for (const d of snapshot.docs) {
+                    await deleteDoc(doc(db, "wishlist", d.id));
+                }
+            } else {
+                newIds.add(leadId);
+                setWishlistIds(newIds);
+                const { addDoc } = await import("firebase/firestore");
+                await addDoc(collection(db, "wishlist"), {
+                    userId: user.uid,
+                    leadId: leadId,
+                    addedAt: new Date()
+                });
+            }
+        } catch (error) {
+            console.error("Error toggling wishlist:", error);
+            // Revert on error
+            setWishlistIds(wishlistIds);
+        }
+    };
 
     function handleNextPage() {
         setPage((p) => p + 1);
@@ -299,7 +359,28 @@ export default function LeadsPage() {
                                 {purchasedLeadIds.has(lead.id) ? (
                                     <span className="badge" style={{ background: "rgba(0, 214, 143, 0.1)", color: "var(--success)" }}>Purchased</span>
                                 ) : (
-                                    <span className="badge badge-available">Available</span>
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        <button
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                toggleWishlist(lead.id);
+                                            }}
+                                            style={{
+                                                background: "none",
+                                                border: "none",
+                                                color: wishlistIds.has(lead.id) ? "#ff4757" : "var(--text-muted)",
+                                                cursor: "pointer",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                padding: 4,
+                                                transition: "all 0.2s"
+                                            }}
+                                        >
+                                            <FiHeart size={20} fill={wishlistIds.has(lead.id) ? "#ff4757" : "none"} />
+                                        </button>
+                                        <span className="badge badge-available">Available</span>
+                                    </div>
                                 )}
                             </div>
 
