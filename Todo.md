@@ -1,0 +1,3 @@
+bulk select
+remove map
+
