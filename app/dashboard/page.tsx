@@ -5,9 +5,10 @@ import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
     FiDollarSign, FiInstagram, FiLinkedin, FiMonitor, FiDownload, FiSearch, FiHeart,
-    FiMail, FiGlobe, FiBriefcase, FiMapPin, FiShoppingBag, FiCalendar, FiClock
+    FiMail, FiGlobe, FiBriefcase, FiMapPin, FiShoppingBag, FiCalendar, FiClock, FiSettings, FiActivity, FiUser
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
 
@@ -62,7 +63,7 @@ export default function DashboardPage() {
     const [error, setError] = useState<string | null>(null);
     const [indexUrl, setIndexUrl] = useState<string | null>(null);
     const [exporting, setExporting] = useState(false);
-    const [activeTab, setActiveTab] = useState<"purchased" | "wishlist">("purchased");
+    const [activeTab, setActiveTab] = useState<"purchased" | "wishlist" | "activity">("purchased");
     const [wishlistLeads, setWishlistLeads] = useState<Lead[]>([]);
     const [wishlistLoading, setWishlistLoading] = useState(false);
 
@@ -188,14 +189,35 @@ export default function DashboardPage() {
         <div className="page-container grid-bg" style={{ minHeight: "100vh", position: "relative" }}>
             <div className="glow-orb" style={{ width: 300, height: 300, background: "#a78bfa", top: 50, left: -80 }} />
 
-            <div style={{ marginBottom: 40 }}>
-                <h1 style={{ fontSize: "2.2rem", fontWeight: 800, marginBottom: 8, letterSpacing: "-1px" }}>
-                    My <span className="gradient-text">Dashboard</span>
-                </h1>
-                <p style={{ color: "var(--text-secondary)", fontSize: "1rem" }}>
-                    Welcome back, {userData?.displayName || user?.email}
-                </p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 32, gap: 20, flexWrap: "wrap" }}>
+                <div>
+                    <h1 style={{ fontSize: "2.2rem", fontWeight: 800, marginBottom: 8, letterSpacing: "-1px" }}>
+                        My <span className="gradient-text">Dashboard</span>
+                    </h1>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "1rem" }}>
+                        Welcome back, {userData?.displayName || user?.email}
+                    </p>
+                </div>
+                <Link href="/profile" className="btn-secondary" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+                    <FiSettings size={18} /> Profile Settings
+                </Link>
             </div>
+
+            {/* Profile Completion Prompt */}
+            {!userData?.companyName && (
+                <div className="glass-card animate-fade-in" style={{ padding: "16px 24px", marginBottom: 32, display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(108, 92, 231, 0.05)", border: "1px solid rgba(108, 92, 231, 0.2)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--accent-gradient)", display: "flex", alignItems: "center", justifyContent: "center", color: "white" }}>
+                            <FiUser size={20} />
+                        </div>
+                        <div>
+                            <h4 style={{ margin: 0, fontSize: "1rem" }}>Complete your professional profile</h4>
+                            <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Add your company details and interests to get better lead recommendations.</p>
+                        </div>
+                    </div>
+                    <Link href="/profile" className="btn-small btn-primary" style={{ textDecoration: "none" }}>Set Up Profile</Link>
+                </div>
+            )}
 
             {/* Dashboard Actions */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, gap: 16, flexWrap: "wrap" }}>
@@ -266,7 +288,8 @@ export default function DashboardPage() {
             <div style={{ display: "flex", gap: 32, borderBottom: "1px solid var(--border-color)", marginBottom: 32 }}>
                 {[
                     { id: "purchased", label: "Purchased Leads", count: orders.length },
-                    { id: "wishlist", label: "Wishlist", count: "New" }
+                    { id: "wishlist", label: "Wishlist", count: wishlistLeads.length || "New" },
+                    { id: "activity", label: "Activity Log", count: "" }
                 ].map((tab) => (
                     <button
                         key={tab.id}
@@ -286,16 +309,21 @@ export default function DashboardPage() {
                             transition: "all 0.2s"
                         }}
                     >
+                        {tab.id === "purchased" && <FiShoppingBag size={16} />}
+                        {tab.id === "wishlist" && <FiHeart size={16} />}
+                        {tab.id === "activity" && <FiActivity size={16} />}
                         {tab.label}
-                        <span style={{
-                            fontSize: "0.7rem",
-                            padding: "2px 8px",
-                            background: activeTab === tab.id ? "var(--accent-gradient)" : "rgba(255,255,255,0.05)",
-                            borderRadius: "var(--radius-full)",
-                            color: "white"
-                        }}>
-                            {tab.count}
-                        </span>
+                        {tab.count !== "" && (
+                            <span style={{
+                                fontSize: "0.7rem",
+                                padding: "2px 8px",
+                                background: activeTab === tab.id ? "var(--accent-gradient)" : "rgba(255,255,255,0.05)",
+                                borderRadius: "var(--radius-full)",
+                                color: "white"
+                            }}>
+                                {tab.count}
+                            </span>
+                        )}
                     </button>
                 ))}
             </div>
@@ -456,7 +484,7 @@ export default function DashboardPage() {
                         </div>
                     )}
                 </>
-            ) : (
+            ) : activeTab === "wishlist" ? (
                 <>
                     <h2 style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 20 }}>My Wishlist</h2>
                     {wishlistLoading ? (
@@ -498,7 +526,54 @@ export default function DashboardPage() {
                         </div>
                     )}
                 </>
-            )}
-        </div>
+            ) : (
+                <div className="glass-card animate-fade-in" style={{ padding: 32 }}>
+                    <h3 style={{ marginBottom: 24, display: "flex", alignItems: "center", gap: 10 }}>
+                        <FiActivity style={{ color: "var(--accent-secondary)" }} /> Recent Account Activity
+                    </h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                        {orders.length === 0 && wishlistLeads.length === 0 ? (
+                            <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)" }}>
+                                No recent activity found.
+                            </div>
+                        ) : (
+                            <>
+                                {[...orders.slice(0, 5)].map((order) => (
+                                    <div key={order.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 0", borderBottom: "1px solid var(--border-color)" }}>
+                                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(0, 214, 143, 0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--success)" }}>
+                                            <FiShoppingBag size={18} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                                                Purchased lead: <span style={{ color: "var(--accent-secondary)" }}>{order.leadData.firstName} {order.leadData.lastName}</span>
+                                            </div>
+                                            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                                {order.purchasedAt?.toDate().toLocaleString()} • Status: {order.status}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {wishlistLeads.slice(0, 3).map((lead) => (
+                                    <div key={lead.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 0", borderBottom: "1px solid var(--border-color)" }}>
+                                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(255, 107, 107, 0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#ff6b6b" }}>
+                                            <FiHeart size={18} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
+                                                Added lead to wishlist: <span style={{ color: "var(--accent-secondary)" }}>{lead.firstName} {lead.lastName}</span>
+                                            </div>
+                                            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                                                Recently added to wishlist
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+                    </div>
+                </div>
+            )
+            }
+        </div >
     );
 }

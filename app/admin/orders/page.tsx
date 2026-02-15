@@ -38,6 +38,11 @@ export default function AdminOrdersPage() {
     const [mounted, setMounted] = useState(false);
     const [approving, setApproving] = useState<string | null>(null);
     const [industryFilter, setIndustryFilter] = useState("All");
+    const [locationFilter, setLocationFilter] = useState("All");
+    const [jobTitleFilter, setJobTitleFilter] = useState("All");
+    const [locations, setLocations] = useState<string[]>([]);
+    const [jobTitles, setJobTitles] = useState<string[]>([]);
+    const [industries, setIndustries] = useState<string[]>([]);
 
     useEffect(() => { setMounted(true); }, []);
 
@@ -55,7 +60,24 @@ export default function AdminOrdersPage() {
 
     useEffect(() => {
         fetchOrders();
+        // Extract metadata from orders for filtering
     }, []);
+
+    useEffect(() => {
+        if (orders.length > 0) {
+            const locs = new Set<string>();
+            const titles = new Set<string>();
+            const inds = new Set<string>();
+            orders.forEach(o => {
+                if (o.leadData?.location) locs.add(o.leadData.location);
+                if (o.leadData?.jobTitle) titles.add(o.leadData.jobTitle);
+                if (o.leadData?.industry) inds.add(o.leadData.industry);
+            });
+            setLocations(["All", ...Array.from(locs).sort()]);
+            setJobTitles(["All", ...Array.from(titles).sort()]);
+            setIndustries(["All", ...Array.from(inds).sort()]);
+        }
+    }, [orders]);
 
     const handleApprove = async (orderId: string) => {
         if (!confirm("Are you sure you want to approve this payment? This will grant the user full access to the lead.")) return;
@@ -74,9 +96,12 @@ export default function AdminOrdersPage() {
         setApproving(null);
     };
 
-    const filteredOrders = orders.filter(o =>
-        industryFilter === "All" || o.leadData?.industry === industryFilter
-    );
+    const filteredOrders = orders.filter(o => {
+        const matchesIndustry = industryFilter === "All" || o.leadData?.industry === industryFilter;
+        const matchesLocation = locationFilter === "All" || o.leadData?.location === locationFilter;
+        const matchesJobTitle = jobTitleFilter === "All" || o.leadData?.jobTitle === jobTitleFilter;
+        return matchesIndustry && matchesLocation && matchesJobTitle;
+    });
 
     const totalRevenue = items => items.reduce((sum, o) => sum + (o.price || 0), 0);
     const confirmedRevenue = orders.filter(o => o.status === "confirmed").reduce((sum, o) => sum + (o.price || 0), 0);
@@ -91,16 +116,51 @@ export default function AdminOrdersPage() {
                     <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Track and approve customer purchases</p>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <label style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>FILTER BY INDUSTRY:</label>
-                    <select
-                        className="input-field"
-                        value={industryFilter}
-                        onChange={(e) => setIndustryFilter(e.target.value)}
-                        style={{ width: "auto", minWidth: 160, padding: "8px 12px", height: "auto", fontSize: "0.9rem" }}
-                    >
-                        {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
-                    </select>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <label style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>INDUSTRY:</label>
+                        <select
+                            className="input-field"
+                            value={industryFilter}
+                            onChange={(e) => setIndustryFilter(e.target.value)}
+                            style={{ width: "auto", minWidth: 140, padding: "8px 12px", height: "auto", fontSize: "0.85rem" }}
+                        >
+                            {industries.map(ind => <option key={ind} value={ind}>{ind === "All" ? "All Industries" : ind}</option>)}
+                        </select>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <label style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>LOCATION:</label>
+                        <select
+                            className="input-field"
+                            value={locationFilter}
+                            onChange={(e) => setLocationFilter(e.target.value)}
+                            style={{ width: "auto", minWidth: 140, padding: "8px 12px", height: "auto", fontSize: "0.85rem" }}
+                        >
+                            {locations.map(loc => <option key={loc} value={loc}>{loc === "All" ? "All Locations" : loc}</option>)}
+                        </select>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <label style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>JOB TITLE:</label>
+                        <select
+                            className="input-field"
+                            value={jobTitleFilter}
+                            onChange={(e) => setJobTitleFilter(e.target.value)}
+                            style={{ width: "auto", minWidth: 140, padding: "8px 12px", height: "auto", fontSize: "0.85rem" }}
+                        >
+                            {jobTitles.map(title => <option key={title} value={title}>{title === "All" ? "All Job Titles" : title}</option>)}
+                        </select>
+                    </div>
+
+                    {(industryFilter !== "All" || locationFilter !== "All" || jobTitleFilter !== "All") && (
+                        <button
+                            onClick={() => { setIndustryFilter("All"); setLocationFilter("All"); setJobTitleFilter("All"); }}
+                            style={{ background: "none", border: "none", color: "#ff6b6b", fontSize: "0.80rem", cursor: "pointer", fontWeight: 600 }}
+                        >
+                            Clear Filters
+                        </button>
+                    )}
                 </div>
             </div>
 

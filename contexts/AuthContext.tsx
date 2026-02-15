@@ -26,6 +26,15 @@ interface UserData {
     displayName: string;
     role: "admin" | "customer";
     createdAt: unknown;
+    companyName?: string;
+    jobTitle?: string;
+    website?: string;
+    professionalInterests?: string[];
+    alertPreferences?: {
+        industries: string[];
+        locations: string[];
+        enabled: boolean;
+    };
 }
 
 interface AuthContextType {
@@ -36,6 +45,7 @@ interface AuthContextType {
     register: (email: string, password: string, name: string) => Promise<void>;
     loginWithGoogle: () => Promise<void>;
     logout: () => Promise<void>;
+    updateUserProfile: (data: Partial<UserData>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -116,7 +126,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserData(null);
     }
 
-    const value = { user, userData, loading, login, register, loginWithGoogle, logout };
+    async function updateUserProfile(data: Partial<UserData>) {
+        if (!user) return;
+        const docRef = doc(db, "users", user.uid);
+        await updateDoc(docRef, data);
+        setUserData(prev => prev ? { ...prev, ...data } : null);
+
+        // Also update Firebase Auth profile if displayName is changed
+        if (data.displayName) {
+            await updateProfile(user, { displayName: data.displayName });
+        }
+    }
+
+    const value = { user, userData, loading, login, register, loginWithGoogle, logout, updateUserProfile };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

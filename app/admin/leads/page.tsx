@@ -19,7 +19,7 @@ import {
     getCountFromServer,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { FiPlus, FiUpload, FiTrash2, FiChevronLeft, FiChevronRight, FiX, FiSearch, FiEye, FiLoader, FiEdit2 } from "react-icons/fi";
+import { FiPlus, FiUpload, FiTrash2, FiChevronLeft, FiChevronRight, FiX, FiSearch, FiEye, FiLoader, FiEdit2, FiCheck } from "react-icons/fi";
 import { useDebounce } from "@/hooks/useDebounce";
 import * as XLSX from "xlsx";
 
@@ -65,6 +65,11 @@ export default function AdminLeadsPage() {
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState<string | null>(null);
     const [industryFilter, setIndustryFilter] = useState("All");
+    const [locationFilter, setLocationFilter] = useState("All");
+    const [jobTitleFilter, setJobTitleFilter] = useState("All");
+    const [locations, setLocations] = useState<string[]>([]);
+    const [jobTitles, setJobTitles] = useState<string[]>([]);
+    const [industries, setIndustries] = useState<string[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Debounce search term for smoother UI
@@ -74,7 +79,7 @@ export default function AdminLeadsPage() {
     const emptyForm = {
         websiteName: "", websiteUrl: "", firstName: "", lastName: "", jobTitle: "",
         email: "", instagram: "", linkedin: "", industry: "Technology", location: "",
-        tiktok: "", founded: "", facebookPixel: "", price: "",
+        tiktok: "", founded: "", facebookPixel: "", price: "0.50",
     };
     const [form, setForm] = useState(emptyForm);
 
@@ -124,14 +129,64 @@ export default function AdminLeadsPage() {
         }
     }, [perPage]);
 
-    useEffect(() => { if (mounted) fetchLeads(true); }, [mounted]);
+    async function fetchMetadata() {
+        const cached = sessionStorage.getItem("admin_leads_metadata");
+        if (cached) {
+            try {
+                const parsed = JSON.parse(cached);
+                setLocations(parsed.locations);
+                setJobTitles(parsed.jobTitles);
+                setIndustries(parsed.industries);
+                return;
+            } catch (e) {
+                console.error("Cache parse error", e);
+            }
+        }
+
+        try {
+            const q = query(collection(db, "leads"), limit(200)); // Optimized sample for admin
+            const snap = await getDocs(q);
+            const locs = new Set<string>();
+            const titles = new Set<string>();
+            const inds = new Set<string>();
+            snap.docs.forEach(doc => {
+                const data = doc.data();
+                if (data.location) locs.add(data.location);
+                if (data.jobTitle) titles.add(data.jobTitle);
+                if (data.industry) inds.add(data.industry);
+            });
+
+            const finalLocs = ["All", ...Array.from(locs).sort()];
+            const finalTitles = ["All", ...Array.from(titles).sort()];
+            const finalInds = ["All", ...Array.from(inds).sort()];
+
+            setLocations(finalLocs);
+            setJobTitles(finalTitles);
+            setIndustries(finalInds);
+
+            sessionStorage.setItem("admin_leads_metadata", JSON.stringify({
+                locations: finalLocs,
+                jobTitles: finalTitles,
+                industries: finalInds
+            }));
+        } catch (err) {
+            console.error("Error fetching metadata:", err);
+        }
+    }
+
+    useEffect(() => {
+        if (mounted) {
+            fetchLeads(true);
+            fetchMetadata();
+        }
+    }, [mounted]);
 
     async function handleAddLead(e: React.FormEvent) {
         e.preventDefault();
         try {
             const leadData = {
                 ...form,
-                price: parseFloat(form.price.toString().replace(/[$,]/g, "")) || 0,
+                price: parseFloat(form.price.toString().replace(/[$,]/g, "")) || 0.5,
             };
 
             if (isEditing && editId) {
@@ -147,7 +202,11 @@ export default function AdminLeadsPage() {
             setIsEditing(false);
             setEditId(null);
             setForm(emptyForm);
+            // Invalidate metadata cache
+            sessionStorage.removeItem("admin_leads_metadata");
+            sessionStorage.removeItem("leads_metadata");
             fetchLeads(true);
+            fetchMetadata();
         } catch (error) {
             console.error("Error saving lead:", error);
         }
@@ -179,8 +238,12 @@ export default function AdminLeadsPage() {
         if (!confirm("Delete this lead?")) return;
         try {
             await deleteDoc(doc(db, "leads", id));
+            // Invalidate metadata cache
+            sessionStorage.removeItem("admin_leads_metadata");
+            sessionStorage.removeItem("leads_metadata");
             setLeads((prev) => prev.filter((l) => l.id !== id));
             if (selectedLead?.id === id) setSelectedLead(null);
+            fetchMetadata();
         } catch (error) {
             console.error("Error deleting:", error);
         }
@@ -390,7 +453,7 @@ export default function AdminLeadsPage() {
                         tiktok: row.tiktok || "",
                         founded: row.founded || "",
                         facebookPixel: row.facebookPixel || "",
-                        price: parseFloat(row.price?.toString().replace(/[$,]/g, "")) || 5,
+                        price: parseFloat(row.price?.toString().replace(/[$,]/g, "")) || 0.5,
                         status: "available",
                         createdAt: serverTimestamp(),
                     });
@@ -402,7 +465,11 @@ export default function AdminLeadsPage() {
             }
 
             setUploadProgress(`✅ Successfully uploaded ${rows.length} leads!`);
+            // Invalidate metadata cache
+            sessionStorage.removeItem("admin_leads_metadata");
+            sessionStorage.removeItem("leads_metadata");
             fetchLeads(true);
+            fetchMetadata();
         } catch (error: any) {
             console.error("Upload error:", error);
             setUploadProgress(`❌ Error: ${error.message || "Failed to parse file"}`);
@@ -414,10 +481,15 @@ export default function AdminLeadsPage() {
 
     const filtered = leads.filter((l) => {
         const matchesIndustry = industryFilter === "All" || l.industry === industryFilter;
-        if (!debouncedSearchTerm) return matchesIndustry;
+        const matchesLocation = locationFilter === "All" || l.location === locationFilter;
+        const matchesJobTitle = jobTitleFilter === "All" || l.jobTitle === jobTitleFilter;
+
+        const matchesBasics = matchesIndustry && matchesLocation && matchesJobTitle;
+
+        if (!debouncedSearchTerm) return matchesBasics;
 
         const s = debouncedSearchTerm.toLowerCase();
-        return matchesIndustry && (
+        return matchesBasics && (
             (l.firstName || l.name || "").toLowerCase().includes(s) ||
             (l.lastName || "").toLowerCase().includes(s) ||
             l.email?.toLowerCase().includes(s) ||
@@ -517,15 +589,43 @@ export default function AdminLeadsPage() {
                         className="input-field"
                         value={industryFilter}
                         onChange={(e) => setIndustryFilter(e.target.value)}
-                        style={{ width: "auto", minWidth: 160, padding: "8px 12px", height: "auto", fontSize: "0.9rem" }}
+                        style={{ width: "auto", minWidth: 140, padding: "8px 12px", height: "auto", fontSize: "0.85rem" }}
                     >
-                        <option value="All">All Industries</option>
-                        {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                        {industries.map(ind => <option key={ind} value={ind}>{ind === "All" ? "All Industries" : ind}</option>)}
                     </select>
                 </div>
 
-                {(searchTerm || industryFilter !== "All") && (
-                    <button className="btn-secondary btn-small" onClick={() => { setSearchTerm(""); setIndustryFilter("All"); }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>LOCATION:</span>
+                    <select
+                        className="input-field"
+                        value={locationFilter}
+                        onChange={(e) => setLocationFilter(e.target.value)}
+                        style={{ width: "auto", minWidth: 140, padding: "8px 12px", height: "auto", fontSize: "0.85rem" }}
+                    >
+                        {locations.map(loc => <option key={loc} value={loc}>{loc === "All" ? "All Locations" : loc}</option>)}
+                    </select>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>JOB TITLE:</span>
+                    <select
+                        className="input-field"
+                        value={jobTitleFilter}
+                        onChange={(e) => setJobTitleFilter(e.target.value)}
+                        style={{ width: "auto", minWidth: 140, padding: "8px 12px", height: "auto", fontSize: "0.85rem" }}
+                    >
+                        {jobTitles.map(title => <option key={title} value={title}>{title === "All" ? "All Job Titles" : title}</option>)}
+                    </select>
+                </div>
+
+                {(searchTerm || industryFilter !== "All" || locationFilter !== "All" || jobTitleFilter !== "All") && (
+                    <button className="btn-secondary btn-small" onClick={() => {
+                        setSearchTerm("");
+                        setIndustryFilter("All");
+                        setLocationFilter("All");
+                        setJobTitleFilter("All");
+                    }}>
                         Clear Filters
                     </button>
                 )}
@@ -734,7 +834,16 @@ export default function AdminLeadsPage() {
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                                 <div>
                                     <label className="input-label">Job Title</label>
-                                    <input className="input-field" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="Marketing Manager" />
+                                    <input
+                                        className="input-field"
+                                        list="job-titles-list"
+                                        value={form.jobTitle}
+                                        onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
+                                        placeholder="Marketing Manager"
+                                    />
+                                    <datalist id="job-titles-list">
+                                        {jobTitles.filter(t => t !== "All").map(t => <option key={t} value={t} />)}
+                                    </datalist>
                                 </div>
                                 <div>
                                     <label className="input-label">Email *</label>
@@ -756,13 +865,29 @@ export default function AdminLeadsPage() {
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                                 <div>
                                     <label className="input-label">Industry</label>
-                                    <select className="input-field" value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })}>
-                                        {INDUSTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                                    </select>
+                                    <input
+                                        className="input-field"
+                                        list="industries-list"
+                                        value={form.industry}
+                                        onChange={(e) => setForm({ ...form, industry: e.target.value })}
+                                        placeholder="Technology"
+                                    />
+                                    <datalist id="industries-list">
+                                        {industries.filter(i => i !== "All").map(i => <option key={i} value={i} />)}
+                                    </datalist>
                                 </div>
                                 <div>
                                     <label className="input-label">Location</label>
-                                    <input className="input-field" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="New York, USA" />
+                                    <input
+                                        className="input-field"
+                                        list="locations-list"
+                                        value={form.location}
+                                        onChange={(e) => setForm({ ...form, location: e.target.value })}
+                                        placeholder="New York, USA"
+                                    />
+                                    <datalist id="locations-list">
+                                        {locations.filter(l => l !== "All").map(l => <option key={l} value={l} />)}
+                                    </datalist>
                                 </div>
                             </div>
                             {/* 11, 12, 13 */}

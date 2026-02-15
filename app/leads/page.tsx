@@ -37,7 +37,6 @@ interface Lead {
 }
 
 const INDUSTRIES = ["All", "Technology", "Healthcare", "Finance", "Real Estate", "E-commerce", "Education", "Marketing", "Legal", "Manufacturing", "Retail", "Food & Beverage", "Other"];
-const PER_PAGE = 12;
 
 export default function LeadsPage() {
     const [leads, setLeads] = useState<Lead[]>([]);
@@ -45,6 +44,7 @@ export default function LeadsPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [industry, setIndustry] = useState("All");
     const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+    const [perPage, setPerPage] = useState<number | "all">(12);
     const [hasMore, setHasMore] = useState(true);
     const [page, setPage] = useState(1);
     const [showFilters, setShowFilters] = useState(false);
@@ -56,7 +56,9 @@ export default function LeadsPage() {
     const [priceMin, setPriceMin] = useState("");
     const [priceMax, setPriceMax] = useState("");
     const [jobTitleFilter, setJobTitleFilter] = useState("");
+    const [industries, setIndustries] = useState<string[]>([]);
     const [locations, setLocations] = useState<string[]>([]);
+    const [jobTitles, setJobTitles] = useState<string[]>([]);
     const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
     const router = useRouter();
     const { addToCart, isInCart } = useCart();
@@ -70,10 +72,11 @@ export default function LeadsPage() {
         setLoading(true);
         setError(null);
         try {
+            const limitValue = perPage === "all" ? 5000 : perPage;
             const constraints: any[] = [
                 where("status", "==", "available"),
                 orderBy("createdAt", "desc"),
-                limit(PER_PAGE),
+                limit(limitValue),
             ];
 
             if (industry !== "All") {
@@ -82,7 +85,7 @@ export default function LeadsPage() {
             if (locationFilter !== "All") {
                 constraints.push(where("location", "==", locationFilter));
             }
-            if (jobTitleFilter) {
+            if (jobTitleFilter && jobTitleFilter !== "All") {
                 constraints.push(where("jobTitle", "==", jobTitleFilter));
             }
             if (priceMin) {
@@ -105,7 +108,7 @@ export default function LeadsPage() {
                 setLeads(prev => [...prev, ...data]);
             }
             setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
-            setHasMore(snapshot.docs.length === PER_PAGE);
+            setHasMore(perPage === "all" ? false : snapshot.docs.length === perPage);
         } catch (error: any) {
             console.error("Error fetching leads:", error);
             const msg = error.message || "";
@@ -125,19 +128,51 @@ export default function LeadsPage() {
         setPage(1);
         setLastDoc(null);
         fetchLeads(true);
-    }, [industry, locationFilter, jobTitleFilter, priceMin, priceMax]);
+    }, [industry, locationFilter, jobTitleFilter, priceMin, priceMax, perPage]);
 
     useEffect(() => {
         async function fetchMetadata() {
+            // Check cache first
+            const cached = sessionStorage.getItem("leads_metadata");
+            if (cached) {
+                try {
+                    const parsed = JSON.parse(cached);
+                    setLocations(parsed.locations);
+                    setJobTitles(parsed.jobTitles);
+                    setIndustries(parsed.industries);
+                    return;
+                } catch (e) {
+                    console.error("Cache parse error", e);
+                }
+            }
+
             try {
-                const q = query(collection(db, "leads"), limit(100)); // Sample 100 to get common locations
+                const q = query(collection(db, "leads"), limit(150)); // Optimized sample size
                 const snap = await getDocs(q);
                 const locs = new Set<string>();
+                const titles = new Set<string>();
+                const inds = new Set<string>();
                 snap.docs.forEach(doc => {
                     const data = doc.data();
                     if (data.location) locs.add(data.location);
+                    if (data.jobTitle) titles.add(data.jobTitle);
+                    if (data.industry) inds.add(data.industry);
                 });
-                setLocations(["All", ...Array.from(locs).sort()]);
+
+                const finalLocs = ["All", ...Array.from(locs).sort()];
+                const finalTitles = ["All", ...Array.from(titles).sort()];
+                const finalInds = ["All", ...Array.from(inds).sort()];
+
+                setLocations(finalLocs);
+                setJobTitles(finalTitles);
+                setIndustries(finalInds);
+
+                // Save to cache
+                sessionStorage.setItem("leads_metadata", JSON.stringify({
+                    locations: finalLocs,
+                    jobTitles: finalTitles,
+                    industries: finalInds
+                }));
             } catch (err) {
                 console.error("Error fetching metadata:", err);
             }
@@ -290,7 +325,7 @@ export default function LeadsPage() {
                                 onChange={(e) => setIndustry(e.target.value)}
                                 style={{ fontSize: "0.9rem" }}
                             >
-                                {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                                {industries.map(ind => <option key={ind} value={ind}>{ind}</option>)}
                             </select>
                         </div>
 
@@ -307,17 +342,16 @@ export default function LeadsPage() {
                             </select>
                         </div>
 
-                        {/* Job Title */}
                         <div style={{ marginBottom: 24 }}>
                             <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>JOB TITLE</label>
-                            <input
-                                type="text"
+                            <select
                                 className="input-field"
-                                placeholder="e.g. CEO, Manager"
                                 value={jobTitleFilter}
                                 onChange={(e) => setJobTitleFilter(e.target.value)}
                                 style={{ fontSize: "0.9rem" }}
-                            />
+                            >
+                                {jobTitles.map(title => <option key={title} value={title}>{title}</option>)}
+                            </select>
                         </div>
 
                         {/* Price Range */}
@@ -463,14 +497,34 @@ export default function LeadsPage() {
 
                             {/* Pagination */}
                             {!loading && filteredLeads.length > 0 && (
-                                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16, marginTop: 48 }}>
-                                    <button className="btn-secondary btn-small" disabled={page === 1} onClick={() => { setPage(1); setLastDoc(null); fetchLeads(true); }}>
-                                        <FiChevronLeft size={16} /> Previous
-                                    </button>
-                                    <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Page {page}</span>
-                                    <button className="btn-secondary btn-small" disabled={!hasMore} onClick={handleNextPage}>
-                                        Next <FiChevronRight size={16} />
-                                    </button>
+                                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 24, marginTop: 48, paddingBottom: 40, flexWrap: "wrap" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        <span style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Show:</span>
+                                        <select
+                                            value={perPage}
+                                            onChange={(e) => setPerPage(e.target.value === "all" ? "all" : Number(e.target.value))}
+                                            className="input-field"
+                                            style={{ width: "auto", padding: "4px 8px", fontSize: "0.85rem", height: "auto" }}
+                                        >
+                                            <option value={12}>12</option>
+                                            <option value={24}>24</option>
+                                            <option value={48}>48</option>
+                                            <option value={96}>96</option>
+                                            <option value="all">All</option>
+                                        </select>
+                                    </div>
+
+                                    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16 }}>
+                                        <button className="btn-secondary btn-small" disabled={page === 1 || perPage === "all"} onClick={() => { setPage(1); setLastDoc(null); fetchLeads(true); }}>
+                                            <FiChevronLeft size={16} /> Prev
+                                        </button>
+                                        <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                                            {perPage === "all" ? "Showing All" : `Page ${page}`}
+                                        </span>
+                                        <button className="btn-secondary btn-small" disabled={!hasMore || perPage === "all"} onClick={handleNextPage}>
+                                            Next <FiChevronRight size={16} />
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </>
