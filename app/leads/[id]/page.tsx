@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import {
     FiArrowLeft, FiMail, FiGlobe, FiBriefcase, FiMapPin, FiDollarSign,
-    FiShoppingCart, FiCheck, FiInstagram, FiLinkedin, FiCalendar, FiMonitor, FiPlus
+    FiShoppingCart, FiCheck, FiInstagram, FiLinkedin, FiCalendar, FiMonitor, FiPlus, FiClock
 } from "react-icons/fi";
 import { useCart } from "@/contexts/CartContext";
 
@@ -41,6 +41,7 @@ export default function LeadDetailPage() {
     const [purchasing, setPurchasing] = useState(false);
     const [purchased, setPurchased] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [paymentPending, setPaymentPending] = useState(false);
     const { addToCart, isInCart } = useCart();
 
     useEffect(() => { setMounted(true); }, []);
@@ -68,7 +69,16 @@ export default function LeadDetailPage() {
                     where("leadId", "==", params.id)
                 );
                 const snapshot = await getDocs(q);
-                if (!snapshot.empty) setPurchased(true);
+                if (!snapshot.empty) {
+                    const orderData = snapshot.docs[0].data();
+                    if (orderData.status === "confirmed") {
+                        setPurchased(true);
+                        setPaymentPending(false);
+                    } else {
+                        setPaymentPending(true);
+                        setPurchased(false);
+                    }
+                }
             } catch (error) {
                 console.error("Error checking purchase status:", error);
             }
@@ -104,10 +114,11 @@ export default function LeadDetailPage() {
                     facebookPixel: lead.facebookPixel,
                 },
                 price: lead.price,
+                status: "pending",
                 purchasedAt: serverTimestamp(),
             });
 
-            setPurchased(true);
+            setPaymentPending(true);
         } catch (error) {
             console.error("Error purchasing lead:", error);
             alert("Purchase failed. Please try again.");
@@ -242,6 +253,22 @@ export default function LeadDetailPage() {
                                     <Link href="/dashboard" style={{ color: "var(--accent-secondary)", fontSize: "0.85rem" }}>
                                         View in Dashboard →
                                     </Link>
+                                </div>
+                            ) : paymentPending ? (
+                                <div
+                                    style={{
+                                        textAlign: "center", padding: 16,
+                                        background: "rgba(255, 107, 107, 0.1)", borderRadius: "var(--radius-md)",
+                                        color: "#ff6b6b", fontWeight: 600,
+                                    }}
+                                >
+                                    <FiClock size={20} style={{ marginBottom: 8 }} />
+                                    <br />
+                                    Payment Pending Approval
+                                    <br />
+                                    <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: 8, fontWeight: 400 }}>
+                                        Our team is verifying your payment. Full access will be granted shortly.
+                                    </p>
                                 </div>
                             ) : lead.status === "sold" ? (
                                 <button className="btn-primary" disabled style={{ width: "100%", opacity: 0.5 }}>

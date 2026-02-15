@@ -18,39 +18,90 @@ interface Order {
         jobTitle: string;
     };
     price: number;
+    status: "pending" | "confirmed";
+    leadData: {
+        firstName: string;
+        lastName: string;
+        email: string;
+        websiteName: string;
+        jobTitle: string;
+        industry: string;
+    };
     purchasedAt: { toDate: () => Date } | null;
 }
+
+const INDUSTRIES = ["All", "Technology", "Healthcare", "Finance", "Real Estate", "E-commerce", "Education", "Marketing", "Legal", "Manufacturing", "Retail", "Food & Beverage", "Other"];
 
 export default function AdminOrdersPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [mounted, setMounted] = useState(false);
+    const [approving, setApproving] = useState<string | null>(null);
+    const [industryFilter, setIndustryFilter] = useState("All");
 
     useEffect(() => { setMounted(true); }, []);
 
-    useEffect(() => {
-        async function fetchOrders() {
-            try {
-                const q = query(collection(db, "orders"), orderBy("purchasedAt", "desc"));
-                const snapshot = await getDocs(q);
-                setOrders(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Order)));
-            } catch (error) {
-                console.error("Error:", error);
-            }
-            setLoading(false);
+    async function fetchOrders() {
+        setLoading(true);
+        try {
+            const q = query(collection(db, "orders"), orderBy("purchasedAt", "desc"));
+            const snapshot = await getDocs(q);
+            setOrders(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Order)));
+        } catch (error) {
+            console.error("Error:", error);
         }
+        setLoading(false);
+    }
+
+    useEffect(() => {
         fetchOrders();
     }, []);
 
-    const totalRevenue = orders.reduce((sum, o) => sum + (o.price || 0), 0);
+    const handleApprove = async (orderId: string) => {
+        if (!confirm("Are you sure you want to approve this payment? This will grant the user full access to the lead.")) return;
+        setApproving(orderId);
+        try {
+            const { updateDoc, doc } = await import("firebase/firestore");
+            await updateDoc(doc(db, "orders", orderId), {
+                status: "confirmed"
+            });
+            // Refresh local state
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "confirmed" } : o));
+        } catch (error) {
+            console.error("Error approving order:", error);
+            alert("Failed to approve order.");
+        }
+        setApproving(null);
+    };
+
+    const filteredOrders = orders.filter(o =>
+        industryFilter === "All" || o.leadData?.industry === industryFilter
+    );
+
+    const totalRevenue = items => items.reduce((sum, o) => sum + (o.price || 0), 0);
+    const confirmedRevenue = orders.filter(o => o.status === "confirmed").reduce((sum, o) => sum + (o.price || 0), 0);
 
     return (
         <div>
-            <div style={{ marginBottom: 32 }}>
-                <h1 style={{ fontSize: "1.8rem", fontWeight: 800, marginBottom: 4, letterSpacing: "-0.5px" }}>
-                    Customer <span className="gradient-text">Orders</span>
-                </h1>
-                <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Track all purchases made by customers</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
+                <div>
+                    <h1 style={{ fontSize: "1.8rem", fontWeight: 800, marginBottom: 4, letterSpacing: "-0.5px" }}>
+                        Customer <span className="gradient-text">Orders</span>
+                    </h1>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Track and approve customer purchases</p>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <label style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>FILTER BY INDUSTRY:</label>
+                    <select
+                        className="input-field"
+                        value={industryFilter}
+                        onChange={(e) => setIndustryFilter(e.target.value)}
+                        style={{ width: "auto", minWidth: 160, padding: "8px 12px", height: "auto", fontSize: "0.9rem" }}
+                    >
+                        {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                    </select>
+                </div>
             </div>
 
             {/* Revenue stat */}
@@ -61,8 +112,8 @@ export default function AdminOrdersPage() {
                             <FiDollarSign size={20} />
                         </div>
                         <div>
-                            <div style={{ fontSize: "1.5rem", fontWeight: 800 }}>${totalRevenue.toFixed(2)}</div>
-                            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Total Revenue</div>
+                            <div style={{ fontSize: "1.5rem", fontWeight: 800 }}>${confirmedRevenue.toFixed(2)}</div>
+                            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Confirmed Revenue</div>
                         </div>
                     </div>
                 </div>
@@ -92,20 +143,22 @@ export default function AdminOrdersPage() {
                                 <th>Customer</th>
                                 <th>Lead Name</th>
                                 <th>Website</th>
-                                <th>Lead Email</th>
+                                <th>Industry</th>
                                 <th>Price</th>
+                                <th>Status</th>
                                 <th>Date</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {orders.length === 0 ? (
+                            {filteredOrders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
-                                        No orders yet.
+                                    <td colSpan={8} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
+                                        {orders.length === 0 ? "No orders yet." : "No orders matching this industry."}
                                     </td>
                                 </tr>
                             ) : (
-                                orders.map((order) => (
+                                filteredOrders.map((order) => (
                                     <tr key={order.id}>
                                         <td>
                                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -121,15 +174,40 @@ export default function AdminOrdersPage() {
                                                 <FiGlobe size={13} /> {order.leadData?.websiteName || "—"}
                                             </div>
                                         </td>
-                                        <td style={{ color: "var(--text-secondary)" }}>{order.leadData?.email}</td>
                                         <td>
-                                            <span style={{ fontWeight: 600, color: "var(--success)" }}>${order.price?.toFixed(2)}</span>
+                                            <span style={{ fontSize: "0.75rem", padding: "3px 8px", background: "rgba(255,255,255,0.05)", borderRadius: "var(--radius-sm)", color: "var(--text-secondary)" }}>
+                                                {order.leadData?.industry || "—"}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span style={{ fontWeight: 600 }}>${order.price?.toFixed(2)}</span>
+                                        </td>
+                                        <td>
+                                            <span className={`badge ${order.status === "confirmed" ? "badge-available" : "badge-sold"}`} style={{
+                                                textTransform: "capitalize",
+                                                background: order.status === "confirmed" ? "rgba(0, 214, 143, 0.1)" : "rgba(255, 107, 107, 0.1)",
+                                                color: order.status === "confirmed" ? "var(--success)" : "#ff6b6b"
+                                            }}>
+                                                {order.status || "pending"}
+                                            </span>
                                         </td>
                                         <td>
                                             <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
                                                 <FiCalendar size={13} />
                                                 {mounted && order.purchasedAt ? order.purchasedAt.toDate().toLocaleDateString() : (order.purchasedAt ? "..." : "N/A")}
                                             </div>
+                                        </td>
+                                        <td>
+                                            {order.status !== "confirmed" && (
+                                                <button
+                                                    className="btn-primary btn-xs"
+                                                    disabled={approving === order.id}
+                                                    onClick={() => handleApprove(order.id)}
+                                                    style={{ padding: "4px 8px", fontSize: "0.75rem" }}
+                                                >
+                                                    {approving === order.id ? "..." : "Approve"}
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))

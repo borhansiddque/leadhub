@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🚀 LeadHub - High-Quality Lead Marketplace
 
-## Getting Started
+LeadHub is a premium, performance-driven marketplace designed for purchasing and managing high-quality business leads. Built with a focus on rich aesthetics, security, and an industry-standard order approval workflow.
 
-First, run the development server:
+## ✨ Core Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### 🛒 Marketplace & Advanced Discovery
+- **Multi-View Interface**: Toggle between a sleek Grid/List view and an **Interactive Map View** powered by `react-leaflet`.
+- **Advanced Filtering**: Drill down into leads by **Industry**, **Location**, **Job Title**, and **Price Range**.
+- **Global Search**: Instant search across all lead metadata with optimized debouncing.
+- **Wishlist**: Save leads for later with a personalized wishlist.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 🔐 Secure Order Approval Flow
+- **Payment Verification**: To ensure quality and security, lead details are protected until payment is confirmed.
+- **Manual Reveal**: Full contact information (Email, Socials, Website) is only revealed after an Admin approves the purchase.
+- **Order Tracking**: Real-time status updates (Pending vs. Confirmed) in both the User and Admin dashboards.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 📊 Comprehensive User Dashboard
+- **Purchased Inventory**: Access all confirmed leads in a clean, organized interface.
+- **Dynamic Access**: View blurred data for pending approvals and full data for confirmed orders.
+- **Excel Export**: Download lead lists into structured XLSX files for easy CRM integration.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 🛡️ Admin Management Suite
+- **Lead Management**: Complete CRUD interface with bulk CSV/Excel upload support.
+- **Order Approval**: Dedicated order management system to verify payments and release leads.
+- **Revenue Analytics**: Track total vs. confirmed revenue metrics.
 
-## Learn More
+## 🛠️ Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+- **Framework**: [Next.js 14+](https://nextjs.org/) (App Router)
+- **Database & Auth**: [Firebase](https://firebase.google.com/) (Firestore, Authentication, Security Rules)
+- **Mapping**: [React Leaflet](https://react-leaflet.js.org/) & [Leaflet](https://leafletjs.com/)
+- **Styling**: Vanilla CSS with Glassmorphism and CSS Variables
+- **Animations**: [Framer Motion](https://www.framer.com/motion/)
+- **Icons**: [React Icons](https://react-icons.github.io/react-icons/)
+- **Data Export**: [XLSX](https://sheetjs.com/)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🚀 Getting Started
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **Environment Setup**: Configure your Firebase project and add credentials to your environment variables.
+2. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+3. **Run Development Server**:
+   ```bash
+   npm run dev
+   ```
+4. **Deploy Security Rules**: Ensure `firestore.rules` are deployed to your Firebase console to enable role-based access.
 
-## Deploy on Vercel
+## 📄 License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Proprietary License - All rights reserved.

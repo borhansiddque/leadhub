@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { collection, query, where, orderBy, limit, startAfter, getDocs, DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FiSearch, FiMapPin, FiBriefcase, FiDollarSign, FiChevronLeft, FiChevronRight, FiFilter, FiGlobe, FiShoppingCart, FiPlus, FiCheck, FiLoader, FiHeart } from "react-icons/fi";
 import { useCart } from "@/contexts/CartContext";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAuth } from "@/contexts/AuthContext";
+
+// Dynamically import Map with no SSR
+const MarketplaceMap = dynamic(() => import("@/components/MarketplaceMap"), {
+    ssr: false,
+    loading: () => <div className="glass-card" style={{ height: 600, display: "flex", alignItems: "center", justifyContent: "center" }}><div className="spinner" /></div>
+});
 
 interface Lead {
     id: string;
@@ -44,6 +52,13 @@ export default function LeadsPage() {
     const [indexUrl, setIndexUrl] = useState<string | null>(null);
     const [purchasedLeadIds, setPurchasedLeadIds] = useState<Set<string>>(new Set());
     const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
+    const [locationFilter, setLocationFilter] = useState("All");
+    const [priceMin, setPriceMin] = useState("");
+    const [priceMax, setPriceMax] = useState("");
+    const [jobTitleFilter, setJobTitleFilter] = useState("");
+    const [locations, setLocations] = useState<string[]>([]);
+    const [viewMode, setViewMode] = useState<"grid" | "map">("grid");
+    const router = useRouter();
     const { addToCart, isInCart } = useCart();
     const { user } = useAuth();
 
@@ -63,6 +78,18 @@ export default function LeadsPage() {
 
             if (industry !== "All") {
                 constraints.push(where("industry", "==", industry));
+            }
+            if (locationFilter !== "All") {
+                constraints.push(where("location", "==", locationFilter));
+            }
+            if (jobTitleFilter) {
+                constraints.push(where("jobTitle", "==", jobTitleFilter));
+            }
+            if (priceMin) {
+                constraints.push(where("price", ">=", parseFloat(priceMin)));
+            }
+            if (priceMax) {
+                constraints.push(where("price", "<=", parseFloat(priceMax)));
             }
 
             const q = !reset && lastDoc
@@ -98,7 +125,25 @@ export default function LeadsPage() {
         setPage(1);
         setLastDoc(null);
         fetchLeads(true);
-    }, [industry]);
+    }, [industry, locationFilter, jobTitleFilter, priceMin, priceMax]);
+
+    useEffect(() => {
+        async function fetchMetadata() {
+            try {
+                const q = query(collection(db, "leads"), limit(100)); // Sample 100 to get common locations
+                const snap = await getDocs(q);
+                const locs = new Set<string>();
+                snap.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (data.location) locs.add(data.location);
+                });
+                setLocations(["All", ...Array.from(locs).sort()]);
+            } catch (err) {
+                console.error("Error fetching metadata:", err);
+            }
+        }
+        fetchMetadata();
+    }, []);
 
     useEffect(() => {
         async function fetchPurchasedLeads() {
@@ -215,255 +260,244 @@ export default function LeadsPage() {
                 </p>
             </div>
 
-            {/* Search & Filter Bar */}
-            <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: 280, position: "relative" }}>
-                    <FiSearch
-                        size={18}
-                        style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}
-                    />
-                    <input
-                        type="text"
-                        className="input-field"
-                        placeholder="Search by name, website, industry, location, job title..."
-                        style={{ paddingLeft: 44 }}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    {isSearching && (
-                        <div style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", color: "var(--accent-secondary)" }}>
-                            <FiLoader className="spinner" size={16} />
-                        </div>
-                    )}
-                </div>
-                <button
-                    className="btn-secondary btn-small"
-                    onClick={() => setShowFilters(!showFilters)}
-                >
-                    <FiFilter size={16} /> Filters
-                </button>
-            </div>
-
-            {/* Industry Filter */}
-            {showFilters && (
-                <div
-                    className="animate-fade-in"
-                    style={{ display: "flex", gap: 8, marginBottom: 32, flexWrap: "wrap" }}
-                >
-                    {INDUSTRIES.map((ind) => (
-                        <button
-                            key={ind}
-                            onClick={() => setIndustry(ind)}
-                            style={{
-                                padding: "8px 18px",
-                                borderRadius: "var(--radius-full)",
-                                border: "1px solid",
-                                borderColor: industry === ind ? "var(--accent-primary)" : "var(--border-color)",
-                                background: industry === ind ? "rgba(108, 92, 231, 0.15)" : "var(--bg-card)",
-                                color: industry === ind ? "var(--accent-secondary)" : "var(--text-secondary)",
-                                fontSize: "0.85rem",
-                                fontWeight: 500,
-                                cursor: "pointer",
-                                transition: "all 0.2s ease",
-                                fontFamily: "inherit",
-                            }}
-                        >
-                            {ind}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* Loading */}
-            {error && (
-                <div className="glass-card" style={{ padding: 40, textAlign: "center", border: "1px solid rgba(255, 107, 107, 0.2)", background: "rgba(255, 107, 107, 0.05)" }}>
-                    <p style={{ color: "#ff6b6b", marginBottom: 16, fontWeight: 500 }}>{error}</p>
-                    {indexUrl ? (
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", maxWidth: 400 }}>
-                                Firestore requires a composite index for this specific filter combination.
-                            </p>
-                            <a
-                                href={indexUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn-primary btn-small"
-                                style={{ textDecoration: "none" }}
+            {/* Main Layout with Sidebar */}
+            <div style={{ display: "flex", gap: 32, flexWrap: "wrap", alignItems: "flex-start" }}>
+                {/* Fixed Filter Sidebar */}
+                <aside style={{ width: 280, flexShrink: 0 }} className={showFilters ? "show-filters" : "hide-filters-mobile"}>
+                    <div className="glass-card" style={{ padding: 24, position: "sticky", top: 100 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                            <h2 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Filters</h2>
+                            <button
+                                onClick={() => {
+                                    setIndustry("All");
+                                    setLocationFilter("All");
+                                    setJobTitleFilter("");
+                                    setPriceMin("");
+                                    setPriceMax("");
+                                }}
+                                style={{ background: "none", border: "none", color: "var(--accent-secondary)", fontSize: "0.8rem", cursor: "pointer", fontWeight: 600 }}
                             >
-                                Create Required Index
-                            </a>
-                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                After clicking, wait ~1 minute for the index to build, then click "Try Again".
-                            </p>
+                                Reset All
+                            </button>
                         </div>
-                    ) : (
-                        <button className="btn-secondary btn-small" onClick={() => fetchLeads(true)}>
-                            Try Again
-                        </button>
-                    )}
-                </div>
-            )}
 
-            {/* Leads Grid */}
-            {!loading && filteredLeads.length === 0 && (
-                <div className="glass-card" style={{ padding: 60, textAlign: "center" }}>
-                    <FiSearch size={48} style={{ color: "var(--text-muted)", marginBottom: 16 }} />
-                    <h3 style={{ fontSize: "1.2rem", marginBottom: 8, color: "var(--text-secondary)" }}>No leads available</h3>
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", maxWidth: 400, margin: "0 auto 24px" }}>
-                        We couldn't find any leads matching your criteria. If you just created a database index, it may take a moment to sync.
-                    </p>
-                    <button className="btn-secondary btn-small" onClick={() => fetchLeads(true)}>
-                        Refresh Marketplace
-                    </button>
-                </div>
-            )}
+                        {/* Industry */}
+                        <div style={{ marginBottom: 24 }}>
+                            <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>INDUSTRY</label>
+                            <select
+                                className="input-field"
+                                value={industry}
+                                onChange={(e) => setIndustry(e.target.value)}
+                                style={{ fontSize: "0.9rem" }}
+                            >
+                                {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                            </select>
+                        </div>
 
-            {!loading && filteredLeads.length > 0 && (
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-                        gap: 20,
-                    }}
-                >
-                    {filteredLeads.map((lead, i) => (
-                        <Link
-                            href={`/leads/${lead.id}`}
-                            key={lead.id}
-                            className="glass-card animate-fade-in-up"
-                            style={{
-                                padding: 24,
-                                textDecoration: "none",
-                                color: "inherit",
-                                animationDelay: `${i * 0.05}s`,
-                                opacity: 0,
-                            }}
-                        >
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                                <div
-                                    style={{
-                                        width: 44,
-                                        height: 44,
-                                        borderRadius: "var(--radius-md)",
-                                        background: "var(--accent-gradient)",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        color: "white",
-                                        fontWeight: 700,
-                                        fontSize: "1rem",
-                                    }}
-                                >
-                                    {lead.firstName?.charAt(0)?.toUpperCase() || "?"}
-                                </div>
-                                {purchasedLeadIds.has(lead.id) ? (
-                                    <span className="badge" style={{ background: "rgba(0, 214, 143, 0.1)", color: "var(--success)" }}>Purchased</span>
-                                ) : (
-                                    <div style={{ display: "flex", gap: 8 }}>
-                                        <button
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                toggleWishlist(lead.id);
-                                            }}
-                                            style={{
-                                                background: "none",
-                                                border: "none",
-                                                color: wishlistIds.has(lead.id) ? "#ff4757" : "var(--text-muted)",
-                                                cursor: "pointer",
-                                                display: "flex",
-                                                alignItems: "center",
-                                                padding: 4,
-                                                transition: "all 0.2s"
-                                            }}
-                                        >
-                                            <FiHeart size={20} fill={wishlistIds.has(lead.id) ? "#ff4757" : "none"} />
-                                        </button>
-                                        <span className="badge badge-available">Available</span>
-                                    </div>
-                                )}
+                        {/* Location */}
+                        <div style={{ marginBottom: 24 }}>
+                            <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>LOCATION</label>
+                            <select
+                                className="input-field"
+                                value={locationFilter}
+                                onChange={(e) => setLocationFilter(e.target.value)}
+                                style={{ fontSize: "0.9rem" }}
+                            >
+                                {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Job Title */}
+                        <div style={{ marginBottom: 24 }}>
+                            <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>JOB TITLE</label>
+                            <input
+                                type="text"
+                                className="input-field"
+                                placeholder="e.g. CEO, Manager"
+                                value={jobTitleFilter}
+                                onChange={(e) => setJobTitleFilter(e.target.value)}
+                                style={{ fontSize: "0.9rem" }}
+                            />
+                        </div>
+
+                        {/* Price Range */}
+                        <div>
+                            <label style={{ display: "block", marginBottom: 8, fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>PRICE RANGE ($)</label>
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <input
+                                    type="number"
+                                    className="input-field"
+                                    placeholder="Min"
+                                    value={priceMin}
+                                    onChange={(e) => setPriceMin(e.target.value)}
+                                    style={{ fontSize: "0.9rem" }}
+                                />
+                                <input
+                                    type="number"
+                                    className="input-field"
+                                    placeholder="Max"
+                                    value={priceMax}
+                                    onChange={(e) => setPriceMax(e.target.value)}
+                                    style={{ fontSize: "0.9rem" }}
+                                />
                             </div>
+                        </div>
+                    </div>
+                </aside>
 
-                            <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 6 }}>
-                                {lead.firstName} {lead.lastName}
-                            </h3>
-                            {lead.jobTitle && (
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--accent-secondary)", fontSize: "0.85rem", marginBottom: 6, fontWeight: 500 }}>
-                                    <FiBriefcase size={13} /> {lead.jobTitle}
+                {/* Content Area */}
+                <div style={{ flex: 1, minWidth: 280 }}>
+                    {/* Search Bar */}
+                    <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+                        <div style={{ flex: 1, position: "relative" }}>
+                            <FiSearch
+                                size={18}
+                                style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}
+                            />
+                            <input
+                                type="text"
+                                className="input-field"
+                                placeholder="Global search leads..."
+                                style={{ paddingLeft: 44 }}
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                            {isSearching && (
+                                <div style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", color: "var(--accent-secondary)" }}>
+                                    <FiLoader className="spinner" size={16} />
                                 </div>
                             )}
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-                                {lead.industry && (
-                                    <span style={{ fontSize: "0.75rem", padding: "3px 10px", background: "rgba(108, 92, 231, 0.1)", borderRadius: "var(--radius-full)", color: "var(--accent-secondary)", border: "1px solid rgba(108, 92, 231, 0.2)" }}>
-                                        {lead.industry}
-                                    </span>
-                                )}
-                                {lead.location && (
-                                    <span style={{ fontSize: "0.75rem", padding: "3px 10px", background: "rgba(255, 255, 255, 0.05)", borderRadius: "var(--radius-full)", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 4 }}>
-                                        <FiMapPin size={11} /> {lead.location}
-                                    </span>
-                                )}
-                            </div>
+                        </div>
 
-                            <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginBottom: 12 }}>
-                                {lead.websiteName && <div style={{ marginBottom: 4 }}>Company: {lead.websiteName}</div>}
-                                {lead.facebookPixel && <div>FB Pixel: {lead.facebookPixel}</div>}
-                            </div>
+                        <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", padding: 4, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}>
+                            <button
+                                onClick={() => setViewMode("grid")}
+                                className={viewMode === "grid" ? "btn-primary btn-xs" : "btn-ghost btn-xs"}
+                                style={{ padding: "8px 16px", borderRadius: "var(--radius-sm)", border: "none" }}
+                            >
+                                Grid
+                            </button>
+                            <button
+                                onClick={() => setViewMode("map")}
+                                className={viewMode === "map" ? "btn-primary btn-xs" : "btn-ghost btn-xs"}
+                                style={{ padding: "8px 16px", borderRadius: "var(--radius-sm)", border: "none" }}
+                            >
+                                Map
+                            </button>
+                        </div>
 
-                            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-color)" }}>
-                                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, color: "var(--accent-secondary)", fontWeight: 700, fontSize: "1.1rem" }}>
-                                    <FiDollarSign size={16} />
-                                    {lead.price?.toFixed(2) || "0.00"}
+                        <button
+                            className="btn-secondary btn-small mobile-only"
+                            onClick={() => setShowFilters(!showFilters)}
+                        >
+                            <FiFilter size={16} /> Filters
+                        </button>
+                    </div>
+
+                    {/* Leads View */}
+                    {viewMode === "map" ? (
+                        <MarketplaceMap leads={filteredLeads} />
+                    ) : (
+                        <>
+                            {error && (
+                                <div className="glass-card" style={{ padding: 40, textAlign: "center", border: "1px solid rgba(255, 107, 107, 0.2)", background: "rgba(255, 107, 107, 0.05)", marginBottom: 24 }}>
+                                    <p style={{ color: "#ff6b6b", marginBottom: 16, fontWeight: 500 }}>{error}</p>
+                                    {indexUrl ? (
+                                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", maxWidth: 400 }}>
+                                                Firestore requires a composite index for this specific filter combination.
+                                            </p>
+                                            <a href={indexUrl} target="_blank" rel="noopener noreferrer" className="btn-primary btn-small" style={{ textDecoration: "none" }}>
+                                                Create Required Index
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <button className="btn-secondary btn-small" onClick={() => fetchLeads(true)}>Try Again</button>
+                                    )}
                                 </div>
-                                <button
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        if (purchasedLeadIds.has(lead.id)) return;
-                                        if (!isInCart(lead.id)) addToCart(lead);
-                                    }}
-                                    disabled={purchasedLeadIds.has(lead.id)}
-                                    className={isInCart(lead.id) || purchasedLeadIds.has(lead.id) ? "btn-secondary btn-small" : "btn-primary btn-small"}
-                                    style={{
-                                        padding: "6px 14px",
-                                        fontSize: "0.8rem",
-                                        background: purchasedLeadIds.has(lead.id) ? "rgba(255, 255, 255, 0.05)" : (isInCart(lead.id) ? "rgba(0, 214, 143, 0.1)" : undefined),
-                                        color: purchasedLeadIds.has(lead.id) ? "var(--text-muted)" : (isInCart(lead.id) ? "var(--success)" : undefined),
-                                        borderColor: purchasedLeadIds.has(lead.id) ? "transparent" : (isInCart(lead.id) ? "rgba(0, 214, 143, 0.2)" : undefined),
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 6,
-                                        cursor: purchasedLeadIds.has(lead.id) ? "not-allowed" : "pointer",
-                                    }}
-                                >
-                                    {purchasedLeadIds.has(lead.id) ? <><FiCheck size={14} /> Owned</> : (isInCart(lead.id) ? <><FiCheck size={14} /> In Cart</> : <><FiPlus size={14} /> Add</>)}
-                                </button>
-                            </div>
-                        </Link>
-                    ))}
-                </div>
-            )}
+                            )}
 
-            {/* Pagination */}
-            {!loading && filteredLeads.length > 0 && (
-                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16, marginTop: 48 }}>
-                    <button
-                        className="btn-secondary btn-small"
-                        disabled={page === 1}
-                        onClick={() => { setPage(1); setLastDoc(null); fetchLeads(true); }}
-                    >
-                        <FiChevronLeft size={16} /> Previous
-                    </button>
-                    <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Page {page}</span>
-                    <button
-                        className="btn-secondary btn-small"
-                        disabled={!hasMore}
-                        onClick={handleNextPage}
-                    >
-                        Next <FiChevronRight size={16} />
-                    </button>
+                            {!loading && filteredLeads.length === 0 && (
+                                <div className="glass-card" style={{ padding: 60, textAlign: "center" }}>
+                                    <FiSearch size={48} style={{ color: "var(--text-muted)", marginBottom: 16 }} />
+                                    <h3 style={{ fontSize: "1.2rem", marginBottom: 8, color: "var(--text-secondary)" }}>No leads available</h3>
+                                    <button className="btn-secondary btn-small" onClick={() => fetchLeads(true)}>Refresh Marketplace</button>
+                                </div>
+                            )}
+
+                            {!loading && filteredLeads.length > 0 && (
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 }}>
+                                    {filteredLeads.map((lead, i) => (
+                                        <Link href={`/leads/${lead.id}`} key={lead.id} className="glass-card animate-fade-in-up" style={{ padding: 24, textDecoration: "none", color: "inherit", animationDelay: `${i * 0.05}s`, opacity: 0 }}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                                                <div style={{ width: 44, height: 44, borderRadius: "var(--radius-md)", background: "var(--accent-gradient)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: "1rem" }}>
+                                                    {lead.firstName?.charAt(0)?.toUpperCase() || "?"}
+                                                </div>
+                                                {purchasedLeadIds.has(lead.id) ? (
+                                                    <span className="badge" style={{ background: "rgba(0, 214, 143, 0.1)", color: "var(--success)" }}>Purchased</span>
+                                                ) : (
+                                                    <div style={{ display: "flex", gap: 8 }}>
+                                                        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(lead.id); }} style={{ background: "none", border: "none", color: wishlistIds.has(lead.id) ? "#ff4757" : "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", padding: 4, transition: "all 0.2s" }}>
+                                                            <FiHeart size={20} fill={wishlistIds.has(lead.id) ? "#ff4757" : "none"} />
+                                                        </button>
+                                                        <span className="badge badge-available">Available</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 6 }}>{lead.firstName} {lead.lastName}</h3>
+                                            {lead.jobTitle && <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--accent-secondary)", fontSize: "0.85rem", marginBottom: 6, fontWeight: 500 }}><FiBriefcase size={13} /> {lead.jobTitle}</div>}
+                                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+                                                {lead.industry && <span style={{ fontSize: "0.75rem", padding: "3px 10px", background: "rgba(108, 92, 231, 0.1)", borderRadius: "var(--radius-full)", color: "var(--accent-secondary)", border: "1px solid rgba(108, 92, 231, 0.2)" }}>{lead.industry}</span>}
+                                                {lead.location && <span style={{ fontSize: "0.75rem", padding: "3px 10px", background: "rgba(255, 255, 255, 0.05)", borderRadius: "var(--radius-full)", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 4 }}><FiMapPin size={11} /> {lead.location}</span>}
+                                            </div>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-color)" }}>
+                                                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, color: "var(--accent-secondary)", fontWeight: 700, fontSize: "1.1rem" }}><FiDollarSign size={16} />{lead.price?.toFixed(2) || "0.00"}</div>
+                                                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (purchasedLeadIds.has(lead.id)) return; if (!isInCart(lead.id)) addToCart(lead); }} disabled={purchasedLeadIds.has(lead.id)} className={isInCart(lead.id) || purchasedLeadIds.has(lead.id) ? "btn-secondary btn-small" : "btn-primary btn-small"} style={{ padding: "6px 14px", fontSize: "0.8rem", cursor: purchasedLeadIds.has(lead.id) ? "not-allowed" : "pointer" }}>
+                                                    {purchasedLeadIds.has(lead.id) ? <><FiCheck size={14} /> Owned</> : (isInCart(lead.id) ? <><FiCheck size={14} /> In Cart</> : <><FiPlus size={14} /> Add</>)}
+                                                </button>
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Pagination */}
+                            {!loading && filteredLeads.length > 0 && (
+                                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16, marginTop: 48 }}>
+                                    <button className="btn-secondary btn-small" disabled={page === 1} onClick={() => { setPage(1); setLastDoc(null); fetchLeads(true); }}>
+                                        <FiChevronLeft size={16} /> Previous
+                                    </button>
+                                    <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Page {page}</span>
+                                    <button className="btn-secondary btn-small" disabled={!hasMore} onClick={handleNextPage}>
+                                        Next <FiChevronRight size={16} />
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
-            )}
+            </div>
+
+            <style jsx>{`
+                @media (max-width: 992px) {
+                    .hide-filters-mobile {
+                        display: none;
+                    }
+                    .show-filters {
+                        display: block;
+                        width: 100% !important;
+                        margin-bottom: 24px;
+                    }
+                    .mobile-only {
+                        display: flex;
+                    }
+                }
+                @media (min-width: 993px) {
+                    .mobile-only {
+                        display: none;
+                    }
+                }
+            `}</style>
         </div>
     );
 }

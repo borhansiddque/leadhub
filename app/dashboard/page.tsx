@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import {
     FiDollarSign, FiInstagram, FiLinkedin, FiMonitor, FiDownload, FiSearch, FiHeart,
-    FiMail, FiGlobe, FiBriefcase, FiMapPin, FiShoppingBag, FiCalendar
+    FiMail, FiGlobe, FiBriefcase, FiMapPin, FiShoppingBag, FiCalendar, FiClock
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
 
@@ -48,6 +48,7 @@ interface Order {
         facebookPixel: string;
     };
     price: number;
+    status: "pending" | "confirmed";
     purchasedAt: { toDate: () => Date } | null;
 }
 
@@ -147,20 +148,22 @@ export default function DashboardPage() {
     const exportToExcel = () => {
         setExporting(true);
         try {
-            const dataToExport = orders.map(order => ({
-                "First Name": order.leadData.firstName,
-                "Last Name": order.leadData.lastName,
-                "Email": order.leadData.email,
-                "Role": order.leadData.jobTitle,
-                "Company": order.leadData.websiteName,
-                "Website": order.leadData.websiteUrl,
-                "Industry": order.leadData.industry,
-                "Location": order.leadData.location,
-                "LinkedIn": order.leadData.linkedin,
-                "Instagram": order.leadData.instagram,
-                "Price Paid": order.price,
-                "Purchase Date": order.purchasedAt?.toDate().toLocaleDateString() || "N/A"
-            }));
+            const dataToExport = orders
+                .filter(order => order.status === "confirmed")
+                .map(order => ({
+                    "First Name": order.leadData.firstName,
+                    "Last Name": order.leadData.lastName,
+                    "Email": order.leadData.email,
+                    "Role": order.leadData.jobTitle,
+                    "Company": order.leadData.websiteName,
+                    "Website": order.leadData.websiteUrl,
+                    "Industry": order.leadData.industry,
+                    "Location": order.leadData.location,
+                    "LinkedIn": order.leadData.linkedin,
+                    "Instagram": order.leadData.instagram,
+                    "Price Paid": order.price,
+                    "Purchase Date": order.purchasedAt?.toDate().toLocaleDateString() || "N/A"
+                }));
 
             const worksheet = XLSX.utils.json_to_sheet(dataToExport);
             const workbook = XLSX.utils.book_new();
@@ -347,35 +350,50 @@ export default function DashboardPage() {
                                 filteredOrders.map((order, i) => {
                                     const d = order.leadData;
                                     const fullName = `${d.firstName || ""} ${d.lastName || ""}`.trim();
+                                    const isPending = order.status !== "confirmed";
+
                                     return (
                                         <div
                                             key={order.id}
                                             className="glass-card animate-fade-in-up"
-                                            style={{ padding: 24, opacity: 0, animationDelay: `${i * 0.05}s` }}
+                                            style={{ padding: 24, opacity: 0, animationDelay: `${i * 0.05}s`, border: isPending ? "1px solid rgba(255, 107, 107, 0.2)" : "1px solid var(--border-color)" }}
                                         >
                                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
                                                 <div style={{ display: "flex", gap: 16, flex: 1 }}>
                                                     <div
                                                         style={{
-                                                            width: 48, height: 48, borderRadius: "var(--radius-md)", background: "var(--accent-gradient)",
-                                                            display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700,
+                                                            width: 48, height: 48, borderRadius: "var(--radius-md)", background: isPending ? "rgba(255, 107, 107, 0.1)" : "var(--accent-gradient)",
+                                                            display: "flex", alignItems: "center", justifyContent: "center", color: isPending ? "#ff6b6b" : "white", fontWeight: 700,
                                                             fontSize: "1.1rem", flexShrink: 0,
                                                         }}
                                                     >
-                                                        {d.firstName?.charAt(0)?.toUpperCase() || "?"}
+                                                        {isPending ? <FiClock size={20} /> : (d.firstName?.charAt(0)?.toUpperCase() || "?")}
                                                     </div>
                                                     <div style={{ flex: 1 }}>
-                                                        <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 4 }}>{fullName}</h3>
+                                                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                                                            <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>{isPending ? "Pending Lead Access" : fullName}</h3>
+                                                            <span style={{
+                                                                fontSize: "0.7rem",
+                                                                padding: "2px 8px",
+                                                                borderRadius: "var(--radius-full)",
+                                                                background: isPending ? "rgba(255, 107, 107, 0.1)" : "rgba(0, 214, 143, 0.1)",
+                                                                color: isPending ? "#ff6b6b" : "var(--success)",
+                                                                fontWeight: 600,
+                                                                textTransform: "uppercase"
+                                                            }}>
+                                                                {isPending ? "Pending Confirmation" : "Confirmed"}
+                                                            </span>
+                                                        </div>
                                                         {d.jobTitle && (
                                                             <div style={{ color: "var(--accent-secondary)", fontSize: "0.85rem", marginBottom: 8 }}>{d.jobTitle}</div>
                                                         )}
                                                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
                                                             <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-                                                                <FiMail size={13} /> {d.email}
+                                                                <FiMail size={13} /> {isPending ? "••••••@••••.com" : d.email}
                                                             </div>
                                                             {d.websiteUrl && (
                                                                 <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-                                                                    <FiGlobe size={13} /> {d.websiteUrl}
+                                                                    <FiGlobe size={13} /> {isPending ? "https://•••••.com" : d.websiteUrl}
                                                                 </div>
                                                             )}
                                                             {d.websiteName && (
@@ -390,30 +408,35 @@ export default function DashboardPage() {
                                                             )}
                                                             {d.instagram && (
                                                                 <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-                                                                    <FiInstagram size={13} /> {d.instagram}
+                                                                    <FiInstagram size={13} /> {isPending ? "@••••••" : d.instagram}
                                                                 </div>
                                                             )}
                                                             {d.linkedin && (
                                                                 <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-                                                                    <FiLinkedin size={13} /> {d.linkedin}
+                                                                    <FiLinkedin size={13} /> {isPending ? "linkedin.com/••••" : d.linkedin}
                                                                 </div>
                                                             )}
                                                             {d.tiktok && (
                                                                 <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-                                                                    <FiMonitor size={13} /> TikTok: {d.tiktok}
+                                                                    <FiMonitor size={13} /> TikTok: {isPending ? "@••••••" : d.tiktok}
                                                                 </div>
                                                             )}
-                                                            {d.founded && (
+                                                            {!isPending && d.founded && (
                                                                 <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
                                                                     <FiCalendar size={13} /> Founded: {d.founded}
                                                                 </div>
                                                             )}
-                                                            {d.facebookPixel && (
+                                                            {!isPending && d.facebookPixel && (
                                                                 <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
                                                                     <FiMonitor size={13} /> Facebook Pixel: {d.facebookPixel}
                                                                 </div>
                                                             )}
                                                         </div>
+                                                        {isPending && (
+                                                            <div style={{ marginTop: 12, padding: "8px 12px", background: "rgba(255,255,255,0.03)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 8 }}>
+                                                                <FiClock size={12} /> Our team is currently verifying your payment.
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div style={{ textAlign: "right" }}>

@@ -60,6 +60,7 @@ export default function CartPage() {
                         facebookPixel: lead.facebookPixel,
                     },
                     price: lead.price,
+                    status: "pending",
                     purchasedAt: serverTimestamp(),
                 });
 
@@ -84,9 +85,9 @@ export default function CartPage() {
             <div className="page-container grid-bg" style={{ minHeight: "80vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div className="glass-card animate-fade-in" style={{ padding: 60, textAlign: "center", maxWidth: 500 }}>
                     <FiCheckCircle size={64} style={{ color: "var(--success)", marginBottom: 24 }} />
-                    <h1 style={{ fontSize: "2rem", fontWeight: 800, marginBottom: 16 }}>Purchase Successful!</h1>
+                    <h1 style={{ fontSize: "2rem", fontWeight: 800, marginBottom: 16 }}>Order Placed!</h1>
                     <p style={{ color: "var(--text-secondary)", marginBottom: 32 }}>
-                        Your leads are now available in your dashboard. You can access their full contact details immediately.
+                        Your order has been received. Access will be granted once our team confirms your payment (usually within 15-30 minutes).
                     </p>
                     <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
                         <Link href="/dashboard" className="btn-primary">Go to Dashboard</Link>

@@ -64,6 +64,7 @@ export default function AdminLeadsPage() {
     const [totalCount, setTotalCount] = useState(0);
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState<string | null>(null);
+    const [industryFilter, setIndustryFilter] = useState("All");
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Debounce search term for smoother UI
@@ -412,9 +413,11 @@ export default function AdminLeadsPage() {
     }
 
     const filtered = leads.filter((l) => {
-        if (!debouncedSearchTerm) return true;
+        const matchesIndustry = industryFilter === "All" || l.industry === industryFilter;
+        if (!debouncedSearchTerm) return matchesIndustry;
+
         const s = debouncedSearchTerm.toLowerCase();
-        return (
+        return matchesIndustry && (
             (l.firstName || l.name || "").toLowerCase().includes(s) ||
             (l.lastName || "").toLowerCase().includes(s) ||
             l.email?.toLowerCase().includes(s) ||
@@ -490,8 +493,8 @@ export default function AdminLeadsPage() {
                 </div>
             )}
 
-            {/* Search */}
-            <div style={{ marginBottom: 20, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            {/* Filters */}
+            <div style={{ marginBottom: 20, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ position: "relative", maxWidth: 400, flex: 1 }}>
                     <FiSearch size={16} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
                     <input
@@ -507,9 +510,23 @@ export default function AdminLeadsPage() {
                         </div>
                     )}
                 </div>
-                {searchTerm && (
-                    <button className="btn-secondary btn-small" onClick={() => setSearchTerm("")}>
-                        Clear Search
+
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>INDUSTRY:</span>
+                    <select
+                        className="input-field"
+                        value={industryFilter}
+                        onChange={(e) => setIndustryFilter(e.target.value)}
+                        style={{ width: "auto", minWidth: 160, padding: "8px 12px", height: "auto", fontSize: "0.9rem" }}
+                    >
+                        <option value="All">All Industries</option>
+                        {INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                    </select>
+                </div>
+
+                {(searchTerm || industryFilter !== "All") && (
+                    <button className="btn-secondary btn-small" onClick={() => { setSearchTerm(""); setIndustryFilter("All"); }}>
+                        Clear Filters
                     </button>
                 )}
             </div>
